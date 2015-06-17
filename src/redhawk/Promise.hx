@@ -1,7 +1,17 @@
 package redhawk;
 
 class Promise {
-  public function new<TResult, TError>(resolver : ((Void -> TResult) -> (Void -> TError) -> Void)) {
+  public function new<TValue, TError>(resolver : ((Void -> TValue) -> (Void -> TError) -> Void)) {
+    function resolveCallback(value : TValue) {
+    }
+
+    function rejectCallback(error : TError) {
+    }
+
+    try {
+      resolver(resolveCallback, rejectCallback);
+    } catch (e) {
+    }
   }
 
   public static function resolve<TResult, TError>(value : TResult) : Promise<TResult, TError> {
