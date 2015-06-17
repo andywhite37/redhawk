@@ -7,7 +7,10 @@ class TestPromise {
   public function new() {}
 
   public function testConstructor() {
-    var promise = new Promise();
-    Assert.isTrue(true);
+    var done = Assert.createAsync();
+
+    var promise = new Promise(function(resolve, reject) {
+    });
+    //promise.then(function(
   }
 }
