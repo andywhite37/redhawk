@@ -10,7 +10,13 @@ class TestPromise {
     var done = Assert.createAsync();
 
     var promise = new Promise(function(resolve, reject) {
+      resolve("test");
     });
-    //promise.then(function(
+
+    promise.then(function(value) {
+      Assert.same("test", value);
+      done();
+      return null;
+    });
   }
 }
