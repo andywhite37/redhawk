@@ -4,15 +4,31 @@ import haxe.Timer;
 
 class Promise<TValue> {
   static var idCounter(default, null) : Int = 0;
+
+  /**
+   * Unique identifier for this Promise
+   */
   public var id(default, null) : Int;
+
+  /**
+   * User-specified name for this Promise (does not need to be unique)
+   */
   public var name(default, null) : String;
+
+  /**
+   * Current State of this promise.
+   */
   public var state(default, null) : State<TValue>;
+
   var fulfillmentListeners(default, null) : Array<TValue -> Void>;
   var rejectionListeners(default, null) : Array<Reason -> Void>;
 
+  /**
+   * Constructor for a Promise.
+   */
   public function new(?name : String, resolver : ((TValue -> Void) -> (Reason -> Void) -> Void)) {
     this.id = nextId();
-    this.name = name != null ? 'Promise: $name' : 'Promise: $id';
+    this.name = (name != null && name.length > 0) ? 'Promise: $name' : 'Promise: $id';
     this.state = Pending;
     this.fulfillmentListeners = [];
     this.rejectionListeners = [];
@@ -24,6 +40,11 @@ class Promise<TValue> {
     }
   }
 
+  /**
+   * Chains fulfillment/rejection handlers onto this promise.  The fulfillment/rejection
+   * handlers should return either a value or a new promise.  If you don't want to return
+   * a value or promise, use the `end` function instead.
+   */
   public function then<TValueNext>(
       ?onFulfillment : TValue -> PromiseOrValue<TValueNext>,
       ?onRejection : Reason -> PromiseOrValue<TValueNext>) : Promise<TValueNext> {
@@ -44,6 +65,10 @@ class Promise<TValue> {
     };
   }
 
+  /**
+   * Chains fulfillment/rejection handlers onto this promise.  The fulfillment/rejection
+   * handlers in `end` cannot return a value nor promise, so the promise chain will end here
+   */
   public function end(?onFulfillment : TValue -> Void, ?onRejection : Reason -> Void) {
     switch state {
       case Pending:
@@ -56,16 +81,29 @@ class Promise<TValue> {
     };
   }
 
+  /**
+   * Chains a rejection handler onto this promise.  Shortcut for `.then(null, onRejection)`.
+   * The rejection handler should return a new value or promise.  If you don't want to return
+   * a value or promise, use `catchesEnd` instead.
+   */
   public function catches<TValueNext>(
-      onRejected : Reason -> PromiseOrValue<TValueNext>) : Promise<TValueNext> {
-    return then(null, onRejected);
+      onRejection : Reason -> PromiseOrValue<TValueNext>) : Promise<TValueNext> {
+    return then(null, onRejection);
   }
 
-  public function catchesEnd(onRejected : Reason -> Void) : Void {
-    end(null, onRejected);
+  /**
+   * Chains a rejection handler onto this promise.  Shortcut for `.end(null, onRejection)`.
+   * The rejection handler cannot return a value nor promise, so the promise chain will end here.
+   */
+  public function catchesEnd(onRejection : Reason -> Void) : Void {
+    end(null, onRejection);
   }
 
-  public static function tries<TValue>(callback : Void -> PromiseOrValue<TValue>) {
+  /**
+   * Returns a new promise which executes the callback in a try/catch, so that thrown errors
+   * can be turned into rejections.
+   */
+  public static function tries<TValue>(callback : Void -> PromiseOrValue<TValue>) : Promise<TValue> {
     return new Promise(function(resolve, reject) {
       try {
         callback()
@@ -77,12 +115,18 @@ class Promise<TValue> {
     });
   }
 
+  /**
+   * Helper method which returns a promise that is fulfilled with the given value.
+   */
   public static function fulfilled<TValue>(value : TValue) : Promise<TValue> {
     return new Promise(function(resolve, reject) {
       resolve(value);
     });
   }
 
+  /**
+   * Helper method which returns a promise that is rejected with the given reason.
+   */
   public static function rejected<TValue>(reason : Reason) : Promise<TValue> {
     return new Promise(function(resolve, reject) {
       reject(reason);
