@@ -1,88 +1,45 @@
 package redhawk;
 
+import haxe.Timer;
+
 class Promise<TValue> {
   static var idCounter(default, null) : Int = 0;
-  var id(default, null) : Int;
-  var state(default, null) : State<TValue>;
+  public var id(default, null) : Int;
+  public var name(default, null) : String;
+  public var state(default, null) : State<TValue>;
   var fulfillmentListeners(default, null) : Array<TValue -> Void>;
   var rejectionListeners(default, null) : Array<Reason -> Void>;
 
-  public function new(resolver : ((TValue -> Void) -> (Reason -> Void) -> Void)) {
-    id = nextId();
-    state = Pending;
-    fulfillmentListeners = [];
-    rejectionListeners = [];
+  public function new(?name : String, resolver : ((TValue -> Void) -> (Reason -> Void) -> Void)) {
+    this.id = nextId();
+    this.name = name != null ? 'Promise: $name' : 'Promise: $id';
+    this.state = Pending;
+    this.fulfillmentListeners = [];
+    this.rejectionListeners = [];
 
     try {
       resolver(setFulfilled, setRejected);
     } catch (e : Dynamic) {
-      setRejected(new Reason("Caught error in promise resolver", e));
+      setRejected(new Reason(e));
     }
   }
 
   public function then<TValueNext>(
-    ?onFulfillment : TValue -> PromiseOrValue<TValueNext>,
-    ?onRejection : Reason -> PromiseOrValue<TValueNext>) : Promise<TValueNext> {
+      ?onFulfillment : TValue -> PromiseOrValue<TValueNext>,
+      ?onRejection : Reason -> PromiseOrValue<TValueNext>) : Promise<TValueNext> {
     switch state {
       case Pending:
-        trace('then $id Pending');
-        return new Promise(function(resolve : TValueNext -> Void, reject : Reason -> Void) {
-          if (onFulfillment != null) {
-            fulfillmentListeners.push(function(value) {
-              onFulfillment(value)
-                .toPromise()
-                .end(function(valueNext) {
-                  resolve(valueNext);
-                }, function(reasonNext) {
-                  reject(reasonNext);
-                });
-            });
-          }
-          if (onRejection != null) {
-            rejectionListeners.push(function(reason) {
-              onRejection(reason)
-                .toPromise()
-                .end(function(valueNext) {
-                  resolve(valueNext);
-                }, function(reasonNext) {
-                  reject(reasonNext);
-                });
-            });
-          }
+        return new Promise(function(resolveNext : TValueNext -> Void, rejectNext : Reason -> Void) {
+          addFulfillmentListener(onFulfillment, resolveNext, rejectNext);
+          addRejectionListener(onRejection, resolveNext, rejectNext);
         });
-
       case Fulfilled(value):
-        trace('then $id Fulfilled($value)');
-        return new Promise(function(resolve : TValueNext -> Void, reject : Reason -> Void) {
-          if (onFulfillment != null) {
-            fulfillmentListeners.push(function(value) {
-              onFulfillment(value)
-                .toPromise()
-                .end(function(valueNext) {
-                  resolve(valueNext);
-                }, function(reasonNext) {
-                  reject(reasonNext);
-                });
-            });
-            notify();
-          }
+        return new Promise(function(resolveNext : TValueNext -> Void, rejectNext : Reason -> Void) {
+          addFulfillmentListener(onFulfillment, resolveNext, rejectNext, true);
         });
-
       case Rejected(reason):
-        trace('then $id Rejected($reason)');
-        return new Promise(function(resolve : TValueNext -> Void, reject : Reason -> Void) {
-          if (onRejection != null) {
-            rejectionListeners.push(function(reason) {
-              onRejection(reason)
-                .toPromise()
-                .end(function(valueNext : TValueNext) {
-                  resolve(valueNext);
-                }, function(reasonNext : Reason) {
-                  reject(reasonNext);
-                });
-            });
-            notify();
-          }
+        return new Promise(function(resolveNext : TValueNext -> Void, rejectNext : Reason -> Void) {
+          addRejectionListener(onRejection, resolveNext, rejectNext, true);
         });
     };
   }
@@ -90,46 +47,32 @@ class Promise<TValue> {
   public function end(?onFulfillment : TValue -> Void, ?onRejection : Reason -> Void) {
     switch state {
       case Pending:
-        trace('end $id Pending');
-        if (onFulfillment != null) {
-          fulfillmentListeners.push(function(value) {
-            onFulfillment(value);
-          });
-        }
-        if (onRejection != null) {
-          rejectionListeners.push(function(reason) {
-            onRejection(reason);
-          });
-        }
+        addFulfillmentListenerEnd(onFulfillment);
+        addRejectionListenerEnd(onRejection);
       case Fulfilled(value):
-        trace('end $id Fulfilled($value)');
-        if (onFulfillment != null) {
-          fulfillmentListeners.push(function(value) {
-            onFulfillment(value);
-          });
-          notify();
-        }
+        addFulfillmentListenerEnd(onFulfillment, true);
       case Rejected(reason):
-        trace('end $id Rejected($reason)');
-        if (onRejection != null) {
-          rejectionListeners.push(function(reason) {
-            onRejection(reason);
-          });
-          notify();
-        }
+        addRejectionListenerEnd(onRejection, true);
     };
   }
 
-  public function catches<TValueNext>(onRejected : Reason -> PromiseOrValue<TValueNext>) : Promise<TValueNext> {
+  public function catches<TValueNext>(
+      onRejected : Reason -> PromiseOrValue<TValueNext>) : Promise<TValueNext> {
     return then(null, onRejected);
+  }
+
+  public function catchesEnd(onRejected : Reason -> Void) : Void {
+    end(null, onRejected);
   }
 
   public static function tries<TValue>(callback : Void -> PromiseOrValue<TValue>) {
     return new Promise(function(resolve, reject) {
       try {
-        resolve(callback());
+        callback()
+          .toPromise()
+          .end(resolve, reject);
       } catch (e : Dynamic) {
-        reject(new Reason("Caught error in tries", e));
+        reject(new Reason(e));
       }
     });
   }
@@ -146,8 +89,11 @@ class Promise<TValue> {
     });
   }
 
+  public function toString() {
+    return name;
+  }
+
   function setFulfilled(value : TValue) {
-    trace('Promise $id fulfilled with value: $value');
     switch state {
       case Pending:
         state = Fulfilled(value);
@@ -158,13 +104,87 @@ class Promise<TValue> {
   }
 
   function setRejected(reason : Reason) {
-    trace('Promise $id rejected with reason: $reason');
     switch state {
       case Pending:
         state = Rejected(reason);
         notify();
       case other:
-        throw new js.Error('Promise cannot change from $other to Fulfilled');
+        throw new js.Error('Promise cannot change from $other to Rejected');
+    }
+  }
+
+  function addFulfillmentListener<TValueNext>(
+      ?onFulfillment : TValue -> PromiseOrValue<TValueNext>,
+      resolveNext : TValueNext -> Void,
+      rejectNext : Reason -> Void,
+      ?notify : Bool = false) {
+    if (onFulfillment == null) {
+      return;
+    }
+
+    fulfillmentListeners.push(function(value) {
+      onFulfillment(value)
+        .toPromise()
+        .end(function(valueNext) {
+          resolveNext(valueNext);
+        }, function(reasonNext) {
+          rejectNext(reasonNext);
+        });
+    });
+
+    if (notify) {
+      this.notify();
+    }
+  }
+
+  function addRejectionListener<TValueNext>(
+      ?onRejection : Reason -> PromiseOrValue<TValueNext>,
+      resolveNext : TValueNext -> Void,
+      rejectNext : Reason -> Void,
+      ?notify : Bool = false) {
+    if (onRejection == null) {
+      return;
+    }
+    rejectionListeners.push(function(value) {
+      onRejection(value)
+        .toPromise()
+        .end(function(valueNext) {
+          resolveNext(valueNext);
+        }, function(reasonNext) {
+          rejectNext(reasonNext);
+        });
+    });
+
+    if (notify) {
+      this.notify();
+    }
+  }
+
+  function addFulfillmentListenerEnd(?onFulfillment : TValue -> Void, ?notify : Bool = false) {
+    if (onFulfillment == null) {
+      return;
+    }
+
+    fulfillmentListeners.push(function(value) {
+      onFulfillment(value);
+    });
+
+    if (notify) {
+      this.notify();
+    }
+  }
+
+  function addRejectionListenerEnd(?onRejection : Reason -> Void, ?notify : Bool = false) {
+    if (onRejection == null) {
+      return;
+    }
+
+    rejectionListeners.push(function(reason) {
+      onRejection(reason);
+    });
+
+    if (notify) {
+      this.notify();
     }
   }
 
@@ -179,6 +199,7 @@ class Promise<TValue> {
         }, 0);
       case Rejected(reason):
         haxe.Timer.delay(function() {
+          trace('Notifying ${rejectionListeners.length} rejection listeners');
           for (rejectionListener in rejectionListeners) {
             rejectionListener(reason);
           }

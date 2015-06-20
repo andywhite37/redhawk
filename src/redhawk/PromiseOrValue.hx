@@ -8,6 +8,9 @@ enum EPromiseOrValue<TValue> {
 }
 
 abstract PromiseOrValue<TValue>(EPromiseOrValue<TValue>) {
+  /**
+   * PromiseOrValue<TValue> contructor
+   */
   public function new(promiseOrValue : EPromiseOrValue<TValue>) {
     this = promiseOrValue;
   }
