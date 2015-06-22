@@ -39,6 +39,7 @@ $ haxelib git redhawk git@github.com:andywhite37/redhawk master src
 ## Example
 
 ```haxe
+// Main.hx
 package ;
 
 import haxe.Timer;
@@ -86,6 +87,12 @@ class Main {
       throw new Error("something went wrong!");
     })
 
+    // No rejection handler - the Error from above should propagate through
+    // this then call.
+    .then(function(value) {
+      throw new Error('We should not have gotten here!');
+    })
+
     // .end is like .then except that it cannot return a value nor promise.  This should
     // be used at the end of the promise chain, when you don't need/want to return a new value.
     // This is not like the `.done` method of libraries like Q.
@@ -99,6 +106,17 @@ class Main {
     trace("...just started");
   }
 }
+```
+
+Build & run for Node.js:
+
+```
+# build.hxml
+-lib redhawk
+-D no-deprecation-warnings
+-main Main
+-js main.js
+-cmd node main.js
 ```
 
 Outputs:
