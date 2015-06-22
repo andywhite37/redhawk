@@ -12,21 +12,21 @@ with a typed library where it is difficult to completely conform.
 <!-- DON'T EDIT THIS SECTION, INSTEAD RE-RUN doctoc TO UPDATE -->
 **Table of Contents**  *generated with [DocToc](https://github.com/thlorenz/doctoc)*
 
-- [Redhawk](#redhawk)
-  - [Installation](#installation)
-  - [Example](#example)
-  - [API Reference](#api-reference)
-    - [Promise](#promise)
-      - [Construction](#construction)
-        - [`new Promise(?name, resolver)`](#new-promisename-resolver)
-        - [`Promise.fulfilled(value)`](#promisefulfilledvalue)
-        - [`Promise.rejected(reason)`](#promiserejectedreason)
-      - [Static helpers](#static-helpers)
-      - [Chaining](#chaining)
-        - [`promise.then(?onFulfillment, ?onRejection)`](#promisethenonfulfillment-onrejection)
-        - [`promise.end(onFulfillment, onRejection)`](#promiseendonfulfillment-onrejection)
-        - [`promise.catches(onRejection)`](#promisecatchesonrejection)
-        - [`promise.catchesEnd(onRejection)`](#promisecatchesendonrejection)
+- [Installation](#installation)
+- [Example](#example)
+- [API Reference](#api-reference)
+  - [Promise](#promise)
+    - [Construction](#construction)
+      - [`new Promise(?name, resolver)`](#new-promisename-resolver)
+      - [`Promise.fulfilled(value)`](#promisefulfilledvalue)
+      - [`Promise.rejected(reason)`](#promiserejectedreason)
+    - [Static helpers](#static-helpers)
+      - [`Promise.tries(function() { ... })`](#promisetriesfunction---)
+    - [Chaining](#chaining)
+      - [`promise.then(?onFulfillment, ?onRejection)`](#promisethenonfulfillment-onrejection)
+      - [`promise.end(onFulfillment, onRejection)`](#promiseendonfulfillment-onrejection)
+      - [`promise.catches(onRejection)`](#promisecatchesonrejection)
+      - [`promise.catchesEnd(onRejection)`](#promisecatchesendonrejection)
 
 <!-- END doctoc generated TOC please keep comment here to allow auto update -->
 
