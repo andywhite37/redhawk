@@ -85,7 +85,7 @@ class Main {
 
 #### Construction
 
-`new Promise(?name, resolver)`
+##### `new Promise(?name, resolver)`
 
 * Constructs a new promise instance.
 * name - optional name for the promise (for debugging)
@@ -95,7 +95,7 @@ class Main {
 // Fulfill the promise synchronously with a value.  Any .then callbacks will
 // be invoked on the next tick.
 var promise = new Promise(function(resolve, reject) {
-  resolve("
+  resolve("some value");
 });
 
 // Fulfill the promise with a value asynchronously
@@ -118,27 +118,10 @@ var promise = new Promise(function(resolve, reject) {
 });
 ```
 
-#### Static helpers
+##### `Promise.fulfilled(value)`
 
-`Promise.tries(function() { ... })`
-
-* Executes a callback and expects the return of a new Promise instance.
-* A thrown exception is caught and turned into a rejected promise.
-
-```haxe
-Promise.tries(function() {
-  // ...do something
-
-  return new Promise(function(resolve, reject) {
-    // resolve or reject
-  });
-});
-```
-
-`Promise.fulfilled(value)`
-
-* Creates a promise that is fulfilled with the given value
-* Value can be any type
+* Creates a promise that is fulfilled with the given `value`
+* `value` can be any type
 * Shorthand for:
 
 ```haxe
@@ -147,10 +130,10 @@ new Promise(function(resolve, reject) {
 });
 ```
 
-`Promise.rejected(reason)`
+##### `Promise.rejected(reason)`
 
-* Creates a promise that is rejected with the given reason
-* reason can be any type, and is implicitly converted to a `Reason` wrapper object.
+* Creates a promise that is rejected with the given `reason`
+* `reason` can be any type, and is implicitly converted to a `Reason` wrapper object.
 * Shorthand for:
 
 ```haxe
@@ -159,20 +142,40 @@ new Promise(function(resolve, reject) {
 });
 ```
 
+#### Static helpers
+
+`Promise.tries(function() { ... })`
+
+* Executes a function and expects the return of a new Promise instance.
+* A thrown error/etc. is caught and turned into rejected promise.
+
+```haxe
+Promise.tries(function() {
+  // ...do something
+  // If this throws, it will be caught and turned into a rejected promise
+
+  return new Promise(function(resolve, reject) {
+    // resolve or reject
+  });
+});
+```
+
 #### Chaining
 
-`promise.then(?onFulfilled, ?onRejected)`
+##### `promise.then(?onFulfillment, ?onRejection)`
 
-* `.then` always return s new promise
-* onFulfilled is a function that accepts a value
-* onRejected is a function that accepts a reason
-* onFulfilled and onRejected are both optional, but if present, must
+* `.then` must always return a new Promise or value (which is turned
+  into a promise), or throw.
+* `onFulfillment` is: `function(value) { ... }`
+* `onRejection` is: `function(reason) { ... }`
+* `onFulfillment` and `onRejection` are both optional, but if present, each must
   return a new promise or value, or throw an error.
+* If you don't want to return a value/promise, use `.end(...)` instead.
 
 ```haxe
 somePromise
   .then(function(value) {
-    // Handle the value from somePromise
+    // Handle the value from somePromise...
 
     // return a new value (which will be converted to a Promise)
     return "another value";
@@ -189,6 +192,41 @@ somePromise
 
     // Return a new promise or value
     return Promise.fulfilled("new value");
+
+    // If the onRejection function is not provided, any rejections from
+    // above promises will be propagated to the next handler.
   })
 ```
 
+##### `promise.end(onFulfillment, onRejection)`
+
+* Same as `.then` except that the `onFulfillment` and `onRejection`
+  functions cannot return a new promise/value.
+* The promise chain ends with `.end`.
+* The reason for this method to exist is that Haxe is a typed language,
+  and the type signature of `.then` expects a return value.
+* Note: `.end` is not the same concept as the `.done` method of
+  libraries like [Q](https://github.com/kriskowal/q).  In Redhawk,
+  unhandled errors are automatically thrown if unhandled after the next
+  tick.
+
+```haxe
+somePromise
+  .then(function(value) {
+    trace('got value: $value');
+    return "new value";
+  })
+  .end(function(value) {
+    trace('got another value $value');
+  }, function(reason) {
+    trace('got a rejection ${reason.value}');
+  });
+```
+
+##### `promise.catches(onRejection)`
+
+* Shorthand for `.then(null, onRejection)`
+
+##### `promise.catchesEnd(onRejection)`
+
+* Shorthand for `.end(null, onRejection)`
