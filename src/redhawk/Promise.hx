@@ -3,6 +3,9 @@ package redhawk;
 import haxe.Timer;
 
 class Promise<TValue> {
+  /**
+   * Private counter of unique ids for promise instances
+   */
   static var idCounter(default, null) : Int = 0;
 
   /**
@@ -20,7 +23,14 @@ class Promise<TValue> {
    */
   public var state(default, null) : State<TValue>;
 
+  /**
+   * List of listeners to be notified when this promise is fulfilled
+   */
   var fulfillmentListeners(default, null) : Array<TValue -> Void>;
+
+  /**
+   * List of listeners to be notified when this promise is rejected
+   */
   var rejectionListeners(default, null) : Array<Reason -> Void>;
 
   /**
@@ -36,7 +46,7 @@ class Promise<TValue> {
     try {
       resolver(setFulfilled, setRejected);
     } catch (e : Dynamic) {
-      setRejected(new Reason(e));
+      setRejected(e);
     }
   }
 
@@ -69,7 +79,7 @@ class Promise<TValue> {
    * Chains fulfillment/rejection handlers onto this promise.  The fulfillment/rejection
    * handlers in `end` cannot return a value nor promise, so the promise chain will end here
    */
-  public function end(?onFulfillment : TValue -> Void, ?onRejection : Reason -> Void) {
+  public function end(?onFulfillment : TValue -> Void, ?onRejection : Reason -> Void) : Promise<TValue> {
     switch state {
       case Pending:
         addFulfillmentListenerEnd(onFulfillment);
@@ -79,6 +89,7 @@ class Promise<TValue> {
       case Rejected(reason):
         addRejectionListenerEnd(onRejection, true);
     };
+    return this;
   }
 
   /**
@@ -95,8 +106,21 @@ class Promise<TValue> {
    * Chains a rejection handler onto this promise.  Shortcut for `.end(null, onRejection)`.
    * The rejection handler cannot return a value nor promise, so the promise chain will end here.
    */
-  public function catchesEnd(onRejection : Reason -> Void) : Void {
+  public function catchesEnd(onRejection : Reason -> Void) : Promise<TValue> {
     end(null, onRejection);
+    return this;
+  }
+
+  /**
+   * Chains a handler to be called when this promise is either fulfilled or rejected.
+   */
+  public function finally(onFinally : Void -> Void) : Promise<TValue> {
+    end(function(value) {
+      onFinally();
+    }, function(reason) {
+      onFinally();
+    });
+    return this;
   }
 
   /**
@@ -110,7 +134,7 @@ class Promise<TValue> {
           .toPromise()
           .end(resolve, reject);
       } catch (e : Dynamic) {
-        reject(new Reason(e));
+        reject(e);
       }
     });
   }
@@ -133,11 +157,46 @@ class Promise<TValue> {
     });
   }
 
-  public function toString() {
+  public function isPending() : Bool {
+    return switch state {
+      case Pending: true;
+      case _: false;
+    };
+  }
+
+  public function isFulfilled() : Bool {
+    return switch state {
+      case Fulfilled(value) : true;
+      case _: false;
+    };
+  }
+
+  public function isRejected() : Bool {
+    return switch state {
+      case Rejected(reason) : true;
+      case _: false;
+    };
+  }
+
+  public function getValue() : TValue {
+    return switch state {
+      case Fulfilled(value): value;
+      case _: throw "Cannot get value for unfulfilled promise";
+    };
+  }
+
+  public function getReason() : Reason {
+    return switch state {
+      case Rejected(reason) : reason;
+      case _: throw "Cannot get reason for non-rejected promise";
+    };
+  }
+
+  public function toString() : String {
     return name;
   }
 
-  function setFulfilled(value : TValue) {
+  function setFulfilled(value : TValue) : Void {
     switch state {
       case Pending:
         state = Fulfilled(value);
@@ -147,7 +206,7 @@ class Promise<TValue> {
     }
   }
 
-  function setRejected(reason : Reason) {
+  function setRejected(reason : Reason) : Void {
     switch state {
       case Pending:
         state = Rejected(reason);
@@ -161,19 +220,25 @@ class Promise<TValue> {
       ?onFulfillment : TValue -> PromiseOrValue<TValueNext>,
       resolveNext : TValueNext -> Void,
       rejectNext : Reason -> Void,
-      ?notify : Bool = false) {
+      ?notify : Bool = false) : Void {
     if (onFulfillment == null) {
+      // If there is no fulfillment handler, we can't pass the current TValue along, because its expecting
+      // a TValueNext.
       return;
     }
 
     fulfillmentListeners.push(function(value) {
-      onFulfillment(value)
-        .toPromise()
-        .end(function(valueNext) {
-          resolveNext(valueNext);
-        }, function(reasonNext) {
-          rejectNext(reasonNext);
-        });
+      try {
+        onFulfillment(value)
+          .toPromise()
+          .end(function(valueNext) {
+            resolveNext(valueNext);
+          }, function(reasonNext) {
+            rejectNext(reasonNext);
+          });
+      } catch (e : Dynamic) {
+        rejectNext(e);
+      }
     });
 
     if (notify) {
@@ -185,18 +250,27 @@ class Promise<TValue> {
       ?onRejection : Reason -> PromiseOrValue<TValueNext>,
       resolveNext : TValueNext -> Void,
       rejectNext : Reason -> Void,
-      ?notify : Bool = false) {
+      ?notify : Bool = false) : Void {
+    // If there is no rejection handler, create a handler that just passes the rejection reason
+    // along.  This allows the error to cascade through a promise chain until it is handled.
     if (onRejection == null) {
-      return;
+      onRejection = function(reason) {
+        return Promise.rejected(reason);
+      };
     }
+
     rejectionListeners.push(function(value) {
-      onRejection(value)
-        .toPromise()
-        .end(function(valueNext) {
-          resolveNext(valueNext);
-        }, function(reasonNext) {
-          rejectNext(reasonNext);
-        });
+      try {
+        onRejection(value)
+          .toPromise()
+          .end(function(valueNext) {
+            resolveNext(valueNext);
+          }, function(reasonNext) {
+            rejectNext(reasonNext);
+          });
+      } catch (e : Dynamic) {
+        rejectNext(e);
+      }
     });
 
     if (notify) {
@@ -241,15 +315,16 @@ class Promise<TValue> {
           }
           fulfillmentListeners = [];
         }, 0);
+
       case Rejected(reason):
         haxe.Timer.delay(function() {
-          trace('Notifying ${rejectionListeners.length} rejection listeners');
           for (rejectionListener in rejectionListeners) {
             rejectionListener(reason);
           }
           rejectionListeners = [];
         }, 0);
-      case _:
+
+      case _: // No-op
     }
   }
 

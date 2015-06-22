@@ -1,5 +1,6 @@
 package redhawk;
 
+import js.Error;
 import haxe.Timer;
 import redhawk.Promise;
 import redhawk.State;
@@ -8,11 +9,50 @@ import utest.Assert;
 class TestPromise {
   public function new() {}
 
+  public function testConstructor() {
+    var promise = new Promise("Test", function(resolve, reject) {
+      // no-op
+    });
+    Assert.same("Promise: Test", promise.name);
+    Assert.isTrue(promise.id > 0);
+    Assert.same("Promise: Test", promise.toString());
+    Assert.same(Pending, promise.state);
+  }
+
+  public function testConstructorWithThrownException() {
+    var done = Assert.createAsync();
+
+    var error = new Error("This is a test");
+    var promise : Promise<String> = null;
+
+    try {
+      promise = new Promise(function(resolve, reject) {
+        throw error;
+      });
+    } catch (e : Dynamic) {
+      Assert.fail("Should not throw");
+    }
+
+    switch promise.state {
+      case Rejected(reason): Assert.equals(error, reason.value);
+      case _: Assert.fail();
+    };
+
+    promise.end(function(value) {
+      Assert.fail();
+      done();
+    }, function(reason) {
+      Assert.equals(error, reason.value);
+      done();
+    });
+  }
+
   public function testStatePendingSync() {
     var promise = new Promise(function(resolve, reject) {
+      // no-op
     });
     switch promise.state {
-      case Pending: Assert.isTrue(true);
+      case Pending: Assert.pass();
       case _: Assert.fail();
     };
   }
@@ -26,7 +66,7 @@ class TestPromise {
       }, 0);
     });
     switch promise.state {
-      case Pending: Assert.isTrue(true);
+      case Pending: Assert.pass();
       case _: Assert.fail();
     };
   }
@@ -49,20 +89,59 @@ class TestPromise {
       }, 0);
     });
     switch promise.state {
-      case Pending: Assert.isTrue(true);
+      case Pending: Assert.pass();
       case _: Assert.fail();
     };
-
     promise.end(function(value) {
       switch promise.state {
         case Fulfilled(value): Assert.same("test", value);
         case _: Assert.fail();
       };
       done();
+    }, function(reason) {
+      Assert.fail();
+      done();
     });
   }
 
-  public function testFulfilled() {
+  public function testStateRejectedSync() {
+    var promise = new Promise(function(resolve, reject) {
+      reject("test");
+    });
+
+    switch promise.state {
+      case Rejected(reason): Assert.same("test", reason.value);
+      case _: Assert.fail();
+    };
+  }
+
+  public function testStateRejectedAsync() {
+    var done = Assert.createAsync();
+
+    var promise = new Promise(function(resolve, reject) {
+      Timer.delay(function() {
+        reject("test");
+      }, 0);
+    });
+
+    switch promise.state {
+      case Pending: Assert.pass();
+      case _: Assert.fail();
+    };
+
+    promise.end(function(value) {
+      Assert.fail();
+      done();
+    }, function(reason) {
+      switch promise.state {
+        case Rejected(reason): Assert.same("test", reason.value);
+        case _: Assert.fail();
+      };
+      done();
+    });
+  }
+
+  public function testFulfilledHelper() {
     var done = Assert.createAsync();
     var i = 0;
 
@@ -71,37 +150,26 @@ class TestPromise {
         Assert.same(2, ++i);
         Assert.same("test", value);
         done();
+      }, function(reason) {
+        Assert.fail();
+        done();
       });
 
     Assert.same(1, ++i);
   }
 
-  public function testRejected() {
+  public function testRejectedHelper() {
     var done = Assert.createAsync();
 
-    Promise.rejected(new Reason("test"))
+    var error = { message: "test" };
+    Promise.rejected(error)
       .end(function(value) {
         Assert.fail();
         done();
       }, function(reason) {
-        Assert.same("test", reason.value);
+        Assert.equals(error, reason.value);
         done();
       });
-  }
-
-  public function testAsyncThen() {
-    var done = Assert.createAsync();
-    var i = 0;
-
-    Promise.fulfilled("test")
-      .end(function(value) {
-        i++;
-        Assert.same(2, i);
-        done();
-      });
-
-    i++;
-    Assert.same(1, i);
   }
 
   public function testEnd() {
@@ -116,7 +184,25 @@ class TestPromise {
     });
   }
 
-  public function testChainOfValues() {
+  public function testEndAsync() {
+    var done = Assert.createAsync();
+    var i = 0;
+
+    Promise.fulfilled("test")
+      .end(function(value) {
+        i++;
+        Assert.same(2, i);
+        done();
+      }, function(reason) {
+        Assert.fail();
+        done();
+      });
+
+    i++;
+    Assert.same(1, i);
+  }
+
+  public function testThenWithChainOfValues() {
     var done = Assert.createAsync;
     var i = 0;
 
@@ -140,7 +226,7 @@ class TestPromise {
     Assert.same(1, ++i);
   }
 
-  public function testChainOfPromises() {
+  public function testThenWithChainOfPromises() {
     var done = Assert.createAsync();
     var i = 0;
 
@@ -166,4 +252,81 @@ class TestPromise {
     Assert.same(++i, 1);
   }
 
+  public function testThenWithMix() {
+    var done = Assert.createAsync();
+
+    Promise.fulfilled("test1")
+      .then(function(value) {
+        Assert.same("test1", value);
+        return Promise.rejected("error1");
+      }, function(reason) {
+        Assert.fail();
+        return Promise.rejected("Test failed");
+      })
+
+      .then(function(value) {
+        Assert.fail();
+        return Promise.rejected("Test failed");
+      }, function(reason) {
+        Assert.same("error1", reason.value);
+        return Promise.fulfilled("test2");
+      })
+
+      .end(function(value) {
+        Assert.same("test2", value);
+        done();
+      }, function(reason) {
+        Assert.fail();
+        done();
+      });
+  }
+
+  public function testRejectionCascading() {
+    var done = Assert.createAsync();
+
+    Promise.rejected("error")
+      .then(function(value) {
+        Assert.fail();
+        return "test1";
+      })
+      .then(function(value) {
+        Assert.fail();
+        return "test2";
+      })
+      .catchesEnd(function(reason) {
+        Assert.same("error", reason.value);
+        done();
+      });
+  }
+
+  public function testTriesHelper() {
+    var done = Assert.createAsync();
+
+    Promise
+      .tries(function() {
+        return "test1";
+      })
+      .then(function(value) {
+        return Promise.fulfilled("test2");
+      }, function(reason) {
+        Assert.fail();
+        throw new Error("Failed test");
+      })
+      .then(function(value) {
+        throw new Error("test error 1");
+      }, function(reason) {
+        Assert.fail();
+        throw new Error("Failed test");
+      })
+      .end(function(value) {
+        Assert.fail();
+        throw new Error("Failed test");
+      }, function(reason) {
+        trace(reason);
+        var error : Error = reason.value;
+        Assert.same("test error 1", error.message);
+        done();
+      });
+
+  }
 }
