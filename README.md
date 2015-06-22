@@ -101,6 +101,18 @@ class Main {
 }
 ```
 
+Outputs:
+
+```
+Starting!
+...just started
+First value
+Second value
+Third value
+Fourth value
+Oops: Error: something went wrong!
+```
+
 ## API Reference
 
 ### Promise
