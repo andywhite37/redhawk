@@ -1,3 +1,13 @@
+# Redhawk
+
+A promise library for Haxe.
+
+This library is mostly inspired by the
+[Bluebird](https://github.com/petkaantonov/bluebird) promise library for
+JavaScript.  This library also attempts to conform to the [Promises A+
+spec](https://promisesaplus.com/) where possible.  There are a few cases
+with a typed library where it is difficult to completely conform.
+
 <!-- START doctoc generated TOC please keep comment here to allow auto update -->
 <!-- DON'T EDIT THIS SECTION, INSTEAD RE-RUN doctoc TO UPDATE -->
 **Table of Contents**  *generated with [DocToc](https://github.com/thlorenz/doctoc)*
@@ -19,16 +29,6 @@
         - [`promise.catchesEnd(onRejection)`](#promisecatchesendonrejection)
 
 <!-- END doctoc generated TOC please keep comment here to allow auto update -->
-
-# Redhawk
-
-A promise library for Haxe.
-
-This library is mostly inspired by the
-[Bluebird](https://github.com/petkaantonov/bluebird) promise library for
-JavaScript.  This library also attempts to conform to the [Promises A+
-spec](https://promisesaplus.com/) where possible.  There are a few cases
-with a typed library where it is difficult to completely conform.
 
 ## Installation
 
@@ -166,7 +166,7 @@ new Promise(function(resolve, reject) {
 
 #### Static helpers
 
-`Promise.tries(function() { ... })`
+##### `Promise.tries(function() { ... })`
 
 * Executes a function and expects the return of a new Promise instance.
 * A thrown error/etc. is caught and turned into rejected promise.
