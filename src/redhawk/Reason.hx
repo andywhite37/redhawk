@@ -10,6 +10,16 @@ class CReason {
   public function new(value : Dynamic) {
     this.value = value;
   }
+
+  /*
+  public function is(type : Dynamic) : Bool {
+    return Std.is(this, type);
+  }
+
+  public function as(type : Dynamic) : Dynamic {
+    return Std.instance(this, type);
+  }
+  */
 }
 
 /**

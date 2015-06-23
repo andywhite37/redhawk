@@ -1,5 +1,6 @@
 package redhawk;
 
+import StringTools;
 import js.Error;
 import haxe.Timer;
 import redhawk.Promise;
@@ -351,7 +352,11 @@ class TestPromise {
   // .always member function
   ////////////////////////////////////////////////////////////////////////////////
 
-  public function testAlwaysWithFulfillment() {
+  ////////////////////////////////////////////////////////////////////////////////
+  // .finally member function
+  ////////////////////////////////////////////////////////////////////////////////
+
+  public function testFinallyWithFulfillment() {
     var done = Assert.createAsync();
     Promise.fulfilled("test")
       .finally(function() {
@@ -360,11 +365,45 @@ class TestPromise {
       });
   }
 
-  public function testAlwaysWithRejection() {
+  public function testFinallyWithRejection() {
     var done = Assert.createAsync();
     Promise.rejected("test")
       .finally(function() {
         Assert.pass();
+        done();
+      });
+  }
+
+  ////////////////////////////////////////////////////////////////////////////////
+  // .thenFulfilled member function
+  ////////////////////////////////////////////////////////////////////////////////
+
+  public function testThenFulfilled() {
+    var done = Assert.createAsync();
+    Promise.delayed(0)
+      .thenFulfilled("test")
+      .end(function(value) {
+        Assert.same("test", value);
+        done();
+      }, function(reason) {
+        Assert.fail();
+        done();
+      });
+  }
+
+  ////////////////////////////////////////////////////////////////////////////////
+  // .thenRejected member function
+  ////////////////////////////////////////////////////////////////////////////////
+
+  public function testThenRejected() {
+    var done = Assert.createAsync();
+    Promise.delayed(0)
+      .thenRejected("test")
+      .end(function(value) {
+        Assert.fail();
+        done();
+      }, function(reason) {
+        Assert.same("test", reason.value);
         done();
       });
   }
@@ -423,7 +462,7 @@ class TestPromise {
   // Promise.all static function
   ////////////////////////////////////////////////////////////////////////////////
 
-  public function testAllFulfilled() {
+  public function testAllInputsFulfilled() {
     var done = Assert.createAsync();
 
     Promise.all(["test1", Promise.fulfilled(1), Promise.fulfilled(true), "test2"])
@@ -439,7 +478,7 @@ class TestPromise {
       });
   }
 
-  public function testAllRejected() {
+  public function testAllInputsRejected() {
     var done = Assert.createAsync();
 
     Promise.all([Promise.rejected("test1"), Promise.rejected("test2")])
@@ -447,12 +486,14 @@ class TestPromise {
         Assert.fail();
         done();
       }, function(reason) {
-        Assert.pass();
+        var reasons : Array<Reason> = reason.value;
+        Assert.same(1, reasons.length);
+        Assert.same("test1", reasons[0].value);
         done();
       });
   }
 
-  public function testAllMixed() {
+  public function testAllInputsMixed() {
     var done = Assert.createAsync();
 
     Promise.all(["test1", Promise.rejected("test2"), Promise.fulfilled("test3")])
@@ -460,7 +501,10 @@ class TestPromise {
         Assert.fail();
         done();
       }, function(reason) {
-        Assert.pass();
+        var reasons : Array<Reason> = reason.value;
+        Assert.equals(null, reasons[0]);
+        Assert.equals("test2", reasons[1].value);
+        Assert.equals(null, reasons[2]);
         done();
       });
   }
@@ -469,7 +513,7 @@ class TestPromise {
   // Promise.any static function
   ////////////////////////////////////////////////////////////////////////////////
 
-  public function testAnyFulfilled() {
+  public function testAnyInputsFulfilled() {
     var done = Assert.createAsync();
 
     Promise.any(["test1", Promise.fulfilled("test2")])
@@ -482,7 +526,7 @@ class TestPromise {
       });
   }
 
-  public function testAnyRejected() {
+  public function testAnyInputsRejected() {
     var done = Assert.createAsync();
 
     Promise.any([Promise.rejected("test1"), Promise.rejected("test2")])
@@ -490,12 +534,14 @@ class TestPromise {
         Assert.fail();
         done();
       }, function(reason) {
-        Assert.isTrue(reason.value == "test1" || reason.value == "test2");
+        var reasons : Array<Reason> = reason.value;
+        Assert.same("test1", reasons[0].value);
+        Assert.same("test2", reasons[1].value);
         done();
       });
   }
 
-  public function testAnyMix() {
+  public function testAnyInputsMixed() {
     var done = Assert.createAsync();
 
     Promise.any([Promise.rejected("test1"), "test2", Promise.rejected("test3")])
@@ -512,14 +558,14 @@ class TestPromise {
   // Promise.many static function
   ////////////////////////////////////////////////////////////////////////////////
 
-  public function testManyAllFulfilled() {
+  public function testManyInputsFulfilled() {
     var done = Assert.createAsync();
 
-    Promise.many(["test1", Promise.fulfilled("test2"), "test3"], 2)
+    Promise.many(["test1", "test2", "test3"], 2)
       .end(function(results) {
         Assert.same(2, results.length);
-        Assert.isTrue("test1" == results[0] || "test2" == results[0] || "test3" == results[0]);
-        Assert.isTrue("test1" == results[1] || "test2" == results[1] || "test3" == results[1]);
+        Assert.isTrue("test1" == results[0]);
+        Assert.isTrue("test2" == results[1]);
         done();
       }, function(reason) {
         Assert.fail();
@@ -527,7 +573,23 @@ class TestPromise {
       });
   }
 
-  public function testManyNotEnoughFulfilled() {
+  public function testManyEnoughInputsFulfilled() {
+    var done = Assert.createAsync();
+
+    Promise.many(["test1", Promise.rejected("test2"), "test3"], 2)
+      .end(function(results) {
+        Assert.same(3, results.length);
+        Assert.isTrue("test1" == results[0]);
+        Assert.equals(null, results[1]);
+        Assert.isTrue("test3" == results[2]);
+        done();
+      }, function(reason) {
+        Assert.fail();
+        done();
+      });
+  }
+
+  public function testManyInputsNotEnoughFulfilled() {
     var done = Assert.createAsync();
 
     Promise.many([Promise.rejected("test1"), "test2", Promise.rejected("test3")], 2)
@@ -535,7 +597,26 @@ class TestPromise {
         Assert.fail();
         done();
       }, function(reason) {
-        Assert.pass();
+        var reasons : Array<Reason> = reason.value;
+        Assert.same("test1", reasons[0].value);
+        Assert.same(null, reasons[1]);
+        Assert.same("test3", reasons[2].value);
+        done();
+      });
+  }
+
+  function testManyInputsRejected() {
+    var done = Assert.createAsync();
+
+    Promise.many([Promise.rejected("test1"), Promise.rejected("test2"), Promise.rejected("test3")], 2)
+      .end(function(results) {
+        Assert.fail();
+        done();
+      }, function(reason) {
+        var reasons : Array<Reason> = reason.value;
+        Assert.same("test1", reasons[0].value);
+        Assert.same("test2", reasons[1].value);
+        Assert.same("test3", reasons[2].value);
         done();
       });
   }
@@ -546,59 +627,45 @@ class TestPromise {
 
   public function testSettledAllFulfilled() {
     var done = Assert.createAsync();
-
     Promise.settled(["test1", Promise.fulfilled("test2"), Promise.fulfilled("test3")])
       .end(function(promises) {
         Assert.isTrue(promises[0].isFulfilled());
         Assert.same("test1", promises[0].getValue());
-
         Assert.isTrue(promises[1].isFulfilled());
         Assert.same("test2", promises[1].getValue());
-
         Assert.isTrue(promises[2].isFulfilled());
         Assert.same("test3", promises[2].getValue());
-
         done();
       });
   }
 
   public function testSettledAllRejected() {
     var done = Assert.createAsync();
-
     Promise.settled([Promise.rejected("test1"), Promise.rejected("test2"), Promise.rejected("test3")])
       .end(function(promises) {
         Assert.isTrue(promises[0].isRejected());
         Assert.same("test1", promises[0].getReason().value);
-
         Assert.isTrue(promises[1].isRejected());
         Assert.same("test2", promises[1].getReason().value);
-
         Assert.isTrue(promises[2].isRejected());
         Assert.same("test3", promises[2].getReason().value);
-
         done();
       });
   }
 
   public function testSettledMixed() {
     var done = Assert.createAsync();
-
     Promise.settled([Promise.rejected("test1"), "test2", Promise.fulfilled("test3"), Promise.rejected("test4")])
       .end(function(promises) {
         Assert.isTrue(promises[0].isRejected());
         Assert.same("test1", promises[0].getReason().value);
-
         Assert.isTrue(promises[1].isFulfilled());
         Assert.same("test2", promises[1].getValue());
-
         Assert.isTrue(promises[2].isFulfilled());
         Assert.same("test3", promises[2].getValue());
-
         Assert.isTrue(promises[3].isRejected());
         Assert.same("test4", promises[3].getReason().value);
-
         done();
-
       });
   }
 
@@ -606,9 +673,286 @@ class TestPromise {
   // Promise.map static function
   ////////////////////////////////////////////////////////////////////////////////
 
+  function mapper(inputValue : String) : PromiseOrValue<Int> {
+    return new Promise(function(resolve, reject) {
+      Timer.delay(function() {
+        var num = Std.parseInt(~/test/.replace(inputValue, ""));
+        if (num >= 0) {
+          resolve(num);
+        } else {
+          reject('Number cannot be negative');
+        }
+      }, 0);
+    });
+  }
+
+  public function testMapInputsFulfilledMapperFulfilled() {
+    var done = Assert.createAsync();
+    var inputs : Array<PromiseOrValue<String>> = [
+      "test1",
+      Promise.fulfilled("test2"),
+      Promise.fulfilled("test3")
+    ];
+    Promise.map(inputs, mapper)
+      .end(function(results) {
+        Assert.same(3, results.length);
+        Assert.same(1, results[0]);
+        Assert.same(2, results[1]);
+        Assert.same(3, results[2]);
+        done();
+      }, function(reason) {
+        Assert.fail();
+        done();
+      });
+  }
+
+  public function testMapInputsFulfilledMapperRejected() {
+    var done = Assert.createAsync();
+    var inputs : Array<PromiseOrValue<String>> = ["test-1", "test-2", "test-3", "test-4"];
+    Promise.map(inputs, mapper)
+      .end(function(results) {
+        Assert.fail();
+        done();
+      }, function(reason) {
+        Assert.pass();
+        done();
+      });
+  }
+
+  public function testMapInputsRejected() {
+    var done = Assert.createAsync();
+    var inputs : Array<PromiseOrValue<String>> = [
+      Promise.rejected("test1"),
+      Promise.rejected("test2"),
+      Promise.rejected("test3")
+    ];
+    Promise.map(inputs, mapper)
+      .end(function(results) {
+        Assert.fail();
+        done();
+      }, function(reason) {
+        Assert.pass();
+        done();
+      });
+  }
+
+  public function testMapInputsMixedMapperMixed() {
+    var done = Assert.createAsync();
+    var inputs : Array<PromiseOrValue<String>> = [
+      Promise.fulfilled("test1"),
+      Promise.rejected("test2"),
+      Promise.fulfilled("test-1"),
+      Promise.rejected("test-2")
+    ];
+    Promise.map(inputs, mapper)
+      .end(function(results) {
+        Assert.fail();
+        done();
+      }, function(reason) {
+        Assert.pass();
+        done();
+      });
+  }
+
   ////////////////////////////////////////////////////////////////////////////////
-  // .map member function
+  // Promise.each static function
   ////////////////////////////////////////////////////////////////////////////////
+
+  function eachCallback(inputValue : String) : PromiseOrValue<Nil> {
+    return new Promise(function(resolve, reject) {
+      Timer.delay(function() {
+        if (inputValue.indexOf("-") > 0) {
+          reject('Cannot contain -');
+        } else {
+          resolve(Nil.nil);
+        }
+      }, 0);
+    });
+  }
+
+  public function testEachInputsFulfilledCallbackFulfilled() {
+    var done = Assert.createAsync();
+    var inputs : Array<PromiseOrValue<String>> = ["test1", "test2", "test3"];
+    Promise.each(inputs, eachCallback)
+      .end(function(results) {
+        Assert.same(3, results.length);
+        Assert.same("test1", results[0]);
+        Assert.same("test2", results[1]);
+        Assert.same("test3", results[2]);
+        done();
+      }, function(reason) {
+        Assert.fail();
+        done();
+      });
+  }
+
+  public function testEachInputsFulfilledCallbackRejected() {
+    var done = Assert.createAsync();
+    var inputs : Array<PromiseOrValue<String>> = ["test1", "test-2", "test3", "test-4"];
+    Promise.each(inputs, eachCallback)
+      .end(function(results) {
+        Assert.fail();
+        done();
+      }, function(reason) {
+        Assert.pass();
+        done();
+      });
+  }
+
+  public function testEachInputsRejected() {
+    var done = Assert.createAsync();
+    var inputs : Array<PromiseOrValue<String>> = [Promise.rejected("test1"), Promise.rejected("test2")];
+    Promise.each(inputs, eachCallback)
+      .end(function(results) {
+        Assert.fail();
+        done();
+      }, function(reason) {
+        Assert.pass();
+        done();
+      });
+  }
+
+  public function testEachInputsMixedCallbackMixed() {
+    var done = Assert.createAsync();
+    var inputs : Array<PromiseOrValue<String>> = [
+      Promise.fulfilled("test1"),
+      Promise.rejected("test2"),
+      Promise.fulfilled("test-3"),
+      Promise.rejected("test-4")
+    ];
+    Promise.each(inputs, eachCallback)
+      .end(function(results) {
+        Assert.fail();
+        done();
+      }, function(reason) {
+        Assert.pass();
+        done();
+      });
+  }
+
+  ////////////////////////////////////////////////////////////////////////////////
+  // Promise.reduce static function
+  ////////////////////////////////////////////////////////////////////////////////
+
+  var reducerDelay = 50;
+
+  public function reducer(acc : Int, value : Int) : PromiseOrValue<Int> {
+    return Promise.delayed(reducerDelay)
+      .thenFulfilled(acc + value);
+  }
+
+  public function testReduceInputsFulfilledReducerFulfilled() {
+    var inputs : Array<PromiseOrValue<Int>> = [1, 2, 3, 4, 5];
+    var done = Assert.createAsync(reducerDelay * inputs.length * 2);
+    Promise.reduce(inputs, reducer, 0)
+      .end(function(value) {
+        Assert.same(15, value);
+        done();
+      }, function(reason) {
+        Assert.fail();
+        done();
+      });
+  }
+
+  public function testReduceInputsRejected() {
+    var inputs : Array<PromiseOrValue<Int>> = [1, 2, Promise.rejected(3), 4, 5];
+    var done = Assert.createAsync(reducerDelay * inputs.length * 2);
+    Promise.reduce(inputs, reducer, 0)
+      .end(function(value) {
+        Assert.fail();
+        done();
+      }, function(reason) {
+        var reasons : Array<Reason> = reason.value;
+        Assert.same(3, reasons[2].value);
+        done();
+      });
+  }
+
+  public function testReduceInputsFulfilledReducerRejected() {
+    var inputs : Array<PromiseOrValue<Int>> = [1, 2, 3, 4, 5];
+    var done = Assert.createAsync(reducerDelay * inputs.length * 2);
+    var reducerRejection = function(acc : Int, input : Int) : PromiseOrValue<Int> {
+      if (input == 3) {
+        return Promise.rejected('sorry');
+      } else {
+        return Promise.fulfilled(acc + input);
+      }
+    };
+    Promise.reduce(inputs, reducerRejection, 0)
+      .end(function(value) {
+        Assert.fail();
+        done();
+      }, function(reason) {
+        var reasons : Array<Reason> = reason.value;
+        Assert.same('sorry', reasons[2].value);
+        done();
+      });
+  }
+
+  public function testReduceMixedTypes() {
+    var inputs : Array<PromiseOrValue<String>> = ["1", "2", "3", "4", "5"];
+    var done = Assert.createAsync(null, 1000);
+    var reducer = function(acc : { sum: Int, product : Int }, input : String) : PromiseOrValue<{ sum: Int, product: Int }> {
+      return Promise.tries(function() {
+        var num = Std.parseInt(input);
+        acc.sum += num;
+        acc.product *= num;
+        return acc;
+      });
+    }
+
+    Promise.reduce(inputs, reducer, { sum: 0, product: 1 })
+      .end(function(value) {
+        Assert.same(1 + 2 + 3 + 4 + 5, value.sum);
+        Assert.same(1 * 2 * 3 * 4 * 5, value.product);
+        done();
+      }, function(reason) {
+        Assert.fail();
+        done();
+      });
+  }
+
+  ////////////////////////////////////////////////////////////////////////////////
+  // Promise.filter static function
+  ////////////////////////////////////////////////////////////////////////////////
+
+  public function testFilterInputsFulfilledFiltererFulfilled() {
+    var done = Assert.createAsync(null, 1000);
+    var inputs : Array<PromiseOrValue<Int>> = [1, 2, 3, 4, 5];
+    var filterer = function(input : Int) : PromiseOrValue<Bool> {
+      return input < 4;
+    };
+
+    Promise.filter(inputs, filterer)
+      .end(function(results) {
+        Assert.same(3, results.length);
+        Assert.same(1, results[0]);
+        Assert.same(2, results[1]);
+        Assert.same(3, results[2]);
+        done();
+      }, function(reason) {
+        Assert.fail();
+        done();
+      });
+  }
+
+  public function testFilterInputsRejected() {
+    var done = Assert.createAsync(null, 1000);
+    var inputs : Array<PromiseOrValue<Int>> = [Promise.rejected(1), Promise.rejected(2)];
+    var filterer = function(input : Int) : PromiseOrValue<Bool> {
+      return input < 4;
+    };
+    Promise.filter(inputs, filterer)
+      .end(function(results) {
+        Assert.fail();
+        done();
+      }, function(reason) {
+        var reasons : Array<Reason> = reason.value;
+        Assert.same(reasons.length, 1);
+        Assert.same(1, reasons[0].value);
+        done();
+      });
+  }
 
   ////////////////////////////////////////////////////////////////////////////////
   // Promise.delayed static
@@ -618,12 +962,10 @@ class TestPromise {
     var ms = 50;
     var done = Assert.createAsync(ms * 2);
     var startTime = Date.now().getTime();
-
     Promise.delayed(ms)
       .end(function(_) {
         var endTime = Date.now().getTime();
         var duration = endTime - startTime;
-        trace('duration: $duration');
         Assert.isTrue(duration > ms);
         done();
       }, function(reason) {

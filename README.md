@@ -25,8 +25,12 @@ with a typed library where it is difficult to completely conform.
       - [`promise.end(?onFulfillment, ?onRejection)`](#promiseendonfulfillment-onrejection)
       - [`promise.catches(onRejection)`](#promisecatchesonrejection)
       - [`promise.catchesEnd(onRejection)`](#promisecatchesendonrejection)
-      - [`promise.delay(ms)`](#promisedelayms)
+      - [`promise.always(onFulfillmentOrRejection)`](#promisealwaysonfulfillmentorrejection)
+      - [`promise.finally(onFulfillmentOrRejection)`](#promisefinallyonfulfillmentorrejection)
+      - [`promise.thenFulfilled(value)`](#promisethenfulfilledvalue)
+      - [`promise.thenRejected(reason)`](#promisethenrejectedreason)
       - [`promise.tap(callback)`](#promisetapcallback)
+      - [`promise.delay(ms)`](#promisedelayms)
     - [Static helpers](#static-helpers)
       - [`Promise.tries(function() { ... })`](#promisetriesfunction---)
       - [`Promise.all(inputs)`](#promiseallinputs)
@@ -34,10 +38,17 @@ with a typed library where it is difficult to completely conform.
       - [`Promise.many(inputs, manyCount)`](#promisemanyinputs-manycount)
       - [`Promise.settled(promisesOrValues)`](#promisesettledpromisesorvalues)
       - [`Promise.map(inputs, mapper)`](#promisemapinputs-mapper)
-      - [`Promise.reduce(inputs, reducer, initialValue)`](#promisereduceinputs-reducer-initialvalue)
       - [`Promise.each(inputs, callback)`](#promiseeachinputs-callback)
+      - [`Promise.reduce(inputs, reducer, initialValue)`](#promisereduceinputs-reducer-initialvalue)
       - [`Promise.filter(inputs, filterer)`](#promisefilterinputs-filterer)
       - [`Promise.delayed(ms)`](#promisedelayedms)
+    - [Promise introspection](#promise-introspection)
+      - [`promise.isPending()`](#promiseispending)
+      - [`promise.isFulfilled()`](#promiseisfulfilled)
+      - [`promise.isRejected()`](#promiseisrejected)
+      - [`promise.isSettled()`](#promiseissettled)
+      - [`promise.getValue()`](#promisegetvalue)
+      - [`promise.getReason()`](#promisegetreason)
 
 <!-- END doctoc generated TOC please keep comment here to allow auto update -->
 
@@ -279,6 +290,29 @@ somePromise
 
 * Shorthand for `.end(null, onRejection)`
 
+##### `promise.always(onFulfillmentOrRejection)`
+
+* TODO
+
+##### `promise.finally(onFulfillmentOrRejection)`
+
+* TODO
+
+##### `promise.thenFulfilled(value)`
+
+* TODO
+
+##### `promise.thenRejected(reason)`
+
+* TODO
+
+##### `promise.tap(callback)`
+
+* `callback` is `function(value) { ... }`
+* Injects a callback into a promise chain which receives the value from
+  the previous promise, and returns a Promise that is resolved with the
+same value.
+
 ##### `promise.delay(ms)`
 
 * Adds a time delay to a promise chain
@@ -292,13 +326,6 @@ somePromise
     // executed after 500ms delay
   });
 ```
-
-##### `promise.tap(callback)`
-
-* `callback` is `function(value) { ... }`
-* Injects a callback into a promise chain which receives the value from
-  the previous promise, and returns a Promise that is resolved with the
-same value.
 
 #### Static helpers
 
@@ -388,24 +415,96 @@ Promise.settled(["test1", Promise.fulfilled(1), Promise.rejected(false)])
       }
     }
   });
-
 ```
 
 ##### `Promise.map(inputs, mapper)`
 
-TODO
+* `inputs` is an array of `PromiseOrValue<TValueInput>` objects
+* `mapper` is a function that accepts a `TValueInput` value and returns a PromiseOrValue<TValueOutput>
+* The Promise returned by `.map` is fulfilled when all of the mapper
+  functions are fulfilled.  The fulfillment value is an array of the
+values from mapping each input value.
+* If any input promises are rejected, or the mapper function result is rejected
+  for any input, the returned Promise is also rejected.
 
-##### `Promise.reduce(inputs, reducer, initialValue)`
-
-TODO
+```haxe
+var inputs : Array<PromiseOrValue<Int> = [1, 2, 3];
+var mapper = function(input : Int) : PromiseOrValue<Int> {
+  return Promise.fulfilled(input * 2);
+};
+Promise.map(inputs, mapper)
+  .end(function(results) {
+    // results == [2, 4, 6]
+  });
+```
 
 ##### `Promise.each(inputs, callback)`
 
-TODO
+* `inputs` is an array of `PromiseOrValue<TValue>` objects
+* `callback` is a function that accepts a `TValueInput` and does some
+  side effect, then returns a `PromiseOrValue<Nil>`
+* The Promise returned by `.each` is fulfilled with an array of the
+  input values (unchanged).
+* If an input promise is rejected, or the callback is rejected for any
+  input, the returned promise is also rejected.
+
+```haxe
+var inputs : Array<PromiseOrValue<Int> = [1, 2, 3];
+var callback = function(input : Int) : PromiseOrValue<Int> {
+  return Promise.delayed(function() {
+    trace(input);
+  }, 0);
+};
+Promise.each(inputs, callback)
+  .end(function(results) {
+    // prints 1 2 3
+    // results == [1, 2, 3]
+  });
+```
+
+##### `Promise.reduce(inputs, reducer, initialValue)`
+
+* `inputs` is an `Array<PromiseOrValue<TValueInput>>`
+* `reducer` is a function which takes an accumulator of type `TValueOutput`,
+a value of type `TValueInput` and returns a
+`PromiseOrValue<TValueOutput>`
+* `initialValue` is the initial value for the accumulator
+* Performs an async reduction, where the inputs can be promises or values,
+and the reducer function can return a `PromiseOrValue<TValueOutput>`
+* Returned promise is resolved with the final accumulator value, or
+  rejected if any input or reducer call is rejected.
+
+```haxe
+var inputs : Array<PromiseOrValue<Int>> = [1, 2, 3];
+var reducer = function(acc : String, value : Int) : PromiseOrValue<String> {
+  return acc + Std.string(value);
+};
+var initialValue = "";
+
+Promise.reduce(inputs, reducer, initialValue)
+  .end(function(result) {
+    // result == "123"
+  });
+```
 
 ##### `Promise.filter(inputs, filterer)`
 
-TODO
+* `inputs` is an `Array<PromiseOrValue<TValue>>`
+* `filterer` is a function which accepts a `TValue` and returns a
+  `PromiseOrValue<Bool>`
+
+```haxe
+var inputs : Array<PromiseOrValue<Int>> = [1, 2, 3, 4, 5];
+var filterer = function(value : Int) : PromiseOrValue<Bool> {
+  return Promise.delayed(50)
+    .thenFulfilled(value < 4);
+};
+
+Promise.filter(inputs, filterer)
+  .end(function(results) {
+    // results = [1, 2, 3]
+  });
+```
 
 ##### `Promise.delayed(ms)`
 
@@ -418,3 +517,31 @@ Promise.delayed(500)
     // executed after 500ms delay
   });
 ```
+
+#### Promise introspection
+
+##### `promise.isPending()`
+
+* Returns whether the promise is pending (not fulfilled nor rejected)
+
+##### `promise.isFulfilled()`
+
+* Returns whether the promise is fulfilled
+
+##### `promise.isRejected()`
+
+* Returns whether the promise is rejected
+
+##### `promise.isSettled()`
+
+* Returns whether the promise is fulfilled or rejected
+
+##### `promise.getValue()`
+
+* Gets the value of a fulfilled Promise
+* Throws an error if the promise is not fulfilled.
+
+##### `promise.getReason()`
+
+* Gets the reason of a rejected Promise
+* Throws an error if the promise is not rejected.
