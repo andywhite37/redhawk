@@ -22,7 +22,7 @@ with a typed library where it is difficult to completely conform.
       - [`Promise.rejected(reason)`](#promiserejectedreason)
     - [Chaining](#chaining)
       - [`promise.then(?onFulfillment, ?onRejection)`](#promisethenonfulfillment-onrejection)
-      - [`promise.end(onFulfillment, onRejection)`](#promiseendonfulfillment-onrejection)
+      - [`promise.end(?onFulfillment, ?onRejection)`](#promiseendonfulfillment-onrejection)
       - [`promise.catches(onRejection)`](#promisecatchesonrejection)
       - [`promise.catchesEnd(onRejection)`](#promisecatchesendonrejection)
       - [`promise.delay(ms)`](#promisedelayms)
