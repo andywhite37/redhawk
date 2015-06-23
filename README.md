@@ -117,6 +117,9 @@ Build & run for Node.js:
 -main Main
 -js main.js
 -cmd node main.js
+
+# build command
+haxe build.hxml
 ```
 
 Outputs:
@@ -194,24 +197,6 @@ new Promise(function(resolve, reject) {
 });
 ```
 
-#### Static helpers
-
-##### `Promise.tries(function() { ... })`
-
-* Executes a function and expects the return of a new Promise instance.
-* A thrown error/etc. is caught and turned into rejected promise.
-
-```haxe
-Promise.tries(function() {
-  // ...do something
-  // If this throws, it will be caught and turned into a rejected promise
-
-  return new Promise(function(resolve, reject) {
-    // resolve or reject
-  });
-});
-```
-
 #### Chaining
 
 ##### `promise.then(?onFulfillment, ?onRejection)`
@@ -282,3 +267,143 @@ somePromise
 ##### `promise.catchesEnd(onRejection)`
 
 * Shorthand for `.end(null, onRejection)`
+
+##### `promise.delay(ms)`
+
+* Adds a time delay to a promise chain
+* Returns a promise that is resolved with Nil.nil
+* TODO: should this resolve the previous promise's value?
+
+```haxe
+somePromise
+  .delay(500)
+  .end(function(_) {
+    // executed after 500ms delay
+  });
+```
+
+##### `promise.tap(callback)`
+
+* `callback` is `function(value) { ... }`
+* Injects a callback into a promise chain which receives the value from
+  the previous promise, and returns a Promise that is resolved with the
+same value.
+
+#### Static helpers
+
+##### `Promise.tries(function() { ... })`
+
+* Executes a function and expects the return of a new Promise instance.
+* A thrown error/etc. is caught and turned into rejected promise.
+
+```haxe
+Promise.tries(function() {
+  // ...do something
+  // If this throws, it will be caught and turned into a rejected promise
+
+  return new Promise(function(resolve, reject) {
+    // resolve or reject
+  });
+});
+```
+
+##### `Promise.all(inputs)`
+
+* `inputs` is a (mixed) array of promises or values
+* Returns a promise that is fulfilled when all of the inputs promises or
+  values are fulfilled.  This fulfillment value of the returned promise
+is a (mixed) array the results of the input promises or values.
+* If any input promise is rejected, the returned promise is rejected
+  with that reason.
+
+```haxe
+Promise.all(["test1", Promise.fulfilled("test2"), "test3"])
+  .end(function(results) {
+    for(result in results) {
+      trace(result);
+    }
+  }, function(reason) {
+    trace("Something was rejected");
+  });
+```
+
+##### `Promise.any(inputs)`
+
+* Returns a Promise that is fulfilled with the value of the first input
+  promise that is fulfilled.
+* Returned promise is rejected if all input promises are rejected.
+
+```haxe
+Promise.any([Promise.rejected("test1"), "test2"])
+  .end(function(result) {
+    // result == "test2"
+  });
+```
+
+##### `Promise.many(inputs, manyCount)`
+
+* Returns a Promise that is fulfilled with an array of `manyCount` values
+for the first `manyCount` input promises or values that are fulfilled.
+* The result value indices do not correspond to the input indices. (TODO is
+  this a good idea?)
+* Returned promise is rejected if fewer than `manyCount` input promises
+  are fulfilled.
+
+```haxe
+Promise.many([Promise.rejected("test1"), "test2", Promise.rejected("test3"), "test4", "test5"], 2)
+  .end(function(results) {
+    // results.length == 2
+    // results[0] == "test2"
+    // results[1] == "test4"
+  });
+```
+
+##### `Promise.settled(promisesOrValues)`
+
+* `promiseOrValues` is an (mixed) array of promises or values
+* The returned promises is fulfilled with an array of settled promises,
+which could be either fulfilled or rejected.
+* Inspect the state of each promise to determine whether it was
+  fulfilled or rejected.
+
+```haxe
+Promise.settled(["test1", Promise.fulfilled(1), Promise.rejected(false)])
+  .end(function(promises) {
+    for (promise in promises) {
+      if (promise.isFulfilled()) {
+        trace(promise.getValue());
+      } else if (promise.isRejected()) {
+        trace(promise.getReason());
+      }
+    }
+  });
+
+```
+
+##### `Promise.map(inputs, mapper)`
+
+TODO
+
+##### `Promise.reduce(inputs, reducer, initialValue)`
+
+TODO
+
+##### `Promise.each(inputs, callback)`
+
+TODO
+
+##### `Promise.filter(inputs, filterer)`
+
+TODO
+
+##### `Promise.delayed(ms)`
+
+* Creates a promise that is fulfilled with nil after a `ms` time delay
+* See also `.delay(ms)` member function
+
+```haxe
+Promise.delayed(500)
+  .end(function(_) {
+    // executed after 500ms delay
+  });
+```

@@ -123,6 +123,17 @@ class Promise<TValue> {
     return this;
   }
 
+  public function delay(ms : Int) : Promise<Nil> {
+    return Promise.delayed(ms);
+  }
+
+  public function tap(callback : TValue -> Void) : Promise<TValue> {
+    return then(function(value) {
+      callback(value);
+      return value;
+    });
+  }
+
   public function isPending() : Bool {
     return switch state {
       case Pending: true;
@@ -196,69 +207,8 @@ class Promise<TValue> {
     });
   }
 
-  public static function join<TValue1, TValue2, TValue3, TValue4, TValue5, TValue6, TValue7, TValue8, TValue9, TValue10>(
-      ?pov1 : PromiseOrValue<TValue1>,
-      ?pov2 : PromiseOrValue<TValue2>,
-      ?pov3 : PromiseOrValue<TValue3>,
-      ?pov4 : PromiseOrValue<TValue4>,
-      ?pov5 : PromiseOrValue<TValue5>,
-      ?pov6 : PromiseOrValue<TValue6>,
-      ?pov7 : PromiseOrValue<TValue7>,
-      ?pov8 : PromiseOrValue<TValue8>,
-      ?pov9 : PromiseOrValue<TValue9>,
-      ?pov10 : PromiseOrValue<TValue10>
-    )
-    : Promise<{
-      value1 : TValue1,
-      value2 : TValue2,
-      value3 : TValue3,
-      value4 : TValue4,
-      value5 : TValue5,
-      value6 : TValue6,
-      value7 : TValue7,
-      value8 : TValue8,
-      value9 : TValue9,
-      value10 : TValue10,
-    }> {
-      var result = {
-        value1: null,
-        value2: null,
-        value3: null,
-        value4: null,
-        value5: null,
-        value6: null,
-        value7: null,
-        value8: null,
-        value9: null,
-        value10: null
-      };
-
-      var povs : Array<PromiseOrValue<Dynamic>> = [];
-      if (pov1 != null) povs.push(pov1);
-      if (pov2 != null) povs.push(pov2);
-      if (pov3 != null) povs.push(pov3);
-      if (pov4 != null) povs.push(pov4);
-      if (pov5 != null) povs.push(pov5);
-      if (pov6 != null) povs.push(pov6);
-      if (pov7 != null) povs.push(pov7);
-      if (pov8 != null) povs.push(pov8);
-      if (pov9 != null) povs.push(pov9);
-      if (pov10 != null) povs.push(pov10);
-
-      return new Promise(function(resolve, reject) {
-        Promise.all(povs)
-          .end(function(results) {
-            trace(results);
-            for (i in 0...results.length) {
-              Reflect.setField(result, 'value${i + 1}', results[i]);
-            }
-            resolve(result);
-          }, reject);
-      });
-  }
-
-  public static function all(povs : Array<PromiseOrValue<Dynamic>>) : Promise<Array<Dynamic>> {
-    var totalCount = povs.length;
+  public static function all(inputs : Array<PromiseOrValue<Dynamic>>) : Promise<Array<Dynamic>> {
+    var totalCount = inputs.length;
     var isSettled = false;
     var fulfillmentCount = 0;
     var rejectionCount = 0;
@@ -266,30 +216,184 @@ class Promise<TValue> {
 
     return new Promise(function(resolve, reject) {
       for (i in 0...totalCount) {
-        if (povs[i] == null) {
-          throw 'Promise.all does not allow null values (index $i)';
+        if (inputs[i] == null) {
+          throw 'Promise.all: null values not allowed';
         }
-        povs[i]
+        inputs[i]
           .toPromise()
           .end(function(value) {
+            fulfillmentCount++;
             if (isSettled) {
               return;
             }
-            fulfillmentCount++;
             results[i] = value;
-            isSettled = fulfillmentCount == totalCount;
-            if (isSettled) {
+            if (fulfillmentCount == totalCount) {
+              isSettled = true;
               resolve(results);
             }
           }, function(reason) {
+            rejectionCount++;
             if (isSettled) {
               return;
             }
-            rejectionCount++;
             isSettled = true;
-            reject("One or more promises was rejected");
+            reject(reason);
           });
       }
+    });
+  }
+
+  public static function any(inputs : Array<PromiseOrValue<Dynamic>>) : Promise<Dynamic> {
+    return new Promise(function(resolve, reject) {
+      var totalCount = inputs.length;
+      var isSettled = false;
+      var fulfillmentCount = 0;
+      var rejectionCount = 0;
+      var result = Dynamic;
+
+      for (i in 0...totalCount) {
+        if (inputs[i] == null) {
+          throw 'Promise.any: null values not allowed';
+        }
+        inputs[i]
+          .toPromise()
+          .end(function(value) {
+            fulfillmentCount++;
+            if (isSettled) {
+              return;
+            }
+            isSettled = true;
+            resolve(value);
+          }, function(reason) {
+            rejectionCount++;
+            if (isSettled) {
+              return;
+            }
+            if (rejectionCount == totalCount) {
+              isSettled = true;
+              reject(reason);
+            }
+          });
+      }
+    });
+  }
+
+  public static function many(inputs : Array<PromiseOrValue<Dynamic>>, manyCount : Int) {
+    return new Promise(function(resolve, reject) {
+      if (manyCount <= 0) {
+        throw 'Promise.many: manyCount must be greater than 0';
+      }
+      var totalCount = inputs.length;
+      var isSettled = false;
+      var fulfillmentCount = 0;
+      var rejectionCount = 0;
+      var results : Array<Dynamic> = [];
+
+      for (i in 0...totalCount) {
+        if (inputs[i] == null) {
+          throw 'Promise.many: null value not allowed';
+        }
+        inputs[i]
+          .toPromise()
+          .end(function(value) {
+            fulfillmentCount++;
+            if (isSettled) {
+              return;
+            }
+            results.push(value);
+            if (fulfillmentCount == manyCount) {
+              isSettled = true;
+              resolve(results);
+            } else if (fulfillmentCount + rejectionCount == totalCount) {
+              reject('Promise.many: only $fulfillmentCount of $manyCount promises were fulfilled');
+            }
+          }, function(reason) {
+            rejectionCount++;
+            if (isSettled) {
+              return;
+            }
+            if (fulfillmentCount + rejectionCount == totalCount) {
+              isSettled = true;
+              reject('Promise.many: only $fulfillmentCount of $manyCount promises were fulfilled');
+            }
+          });
+      }
+    });
+  }
+
+  public static function settled(inputs : Array<PromiseOrValue<Dynamic>>) : Promise<Array<Promise<Dynamic>>> {
+    return new Promise(function(resolve, reject) {
+      var totalCount = inputs.length;
+      var settledCount = 0;
+      var results : Array<Promise<Dynamic>> = [];
+
+      for (i in 0...totalCount) {
+        if (inputs[i] == null) {
+          throw 'Promise.settled: null values not allowed';
+        }
+        var promise = inputs[i].toPromise();
+        promise.finally(function() {
+          settledCount++;
+          results[i] = promise;
+          if (settledCount == totalCount) {
+            resolve(results);
+          }
+        });
+      }
+    });
+  }
+
+  public static function map<TValueInput, TValueOutput>(inputs : Array<PromiseOrValue<TValueInput>>, mapper : TValueInput -> PromiseOrValue<TValueOutput>) {
+    return new Promise(function(resolve, reject) {
+      var totalCount = inputs.length;
+      var fulfillmentCount = 0;
+      var isSettled = false;
+      var results : Array<TValueOutput> = [];
+
+      for (i in 0...totalCount) {
+        if (inputs[i] == null) {
+          throw 'Promise.map: null values not allowed';
+        }
+
+        // Resolve the input value
+        inputs[i]
+          .toPromise()
+          .then(function(inputValue) {
+            // Map the input value into the output value
+            return mapper(inputValue);
+          })
+          .end(function(outputValue) {
+            fulfillmentCount++;
+            if (isSettled) {
+              return;
+            }
+            results[i] = outputValue;
+            if (fulfillmentCount == totalCount) {
+              isSettled = true;
+              resolve(results);
+            }
+          }, function(reason) {
+            isSettled = true;
+            reject(reason);
+          });
+      }
+    });
+  }
+
+  public static function reduce() {
+  }
+
+  public static function filter() {
+  }
+
+  public static function each() {
+  }
+
+  public static function delayed(ms : Int) : Promise<Nil> {
+    return new Promise(function(resolve, reject) {
+      Timer.delay(function() {
+        resolve(Nil.nil);
+      }, ms);
     });
   }
 
