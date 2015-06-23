@@ -246,7 +246,7 @@ somePromise
   })
 ```
 
-##### `promise.end(onFulfillment, onRejection)`
+##### `promise.end(?onFulfillment, ?onRejection)`
 
 * Same as `.then` except that the `onFulfillment` and `onRejection`
   functions cannot return a new promise/value.
