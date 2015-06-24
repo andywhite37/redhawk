@@ -1,4 +1,4 @@
-# Redhawk
+# redhawk
 
 An experimental promise library for Haxe.
 
@@ -166,7 +166,7 @@ Oops: Error: something went wrong!
 
 The goal of this library was to leverage Haxe typing as much as possible
 while keeping the API as lightweight, easy, and non-verbose as possible.
-One key component in Redhawk is the `PromiseOrValue<T>` abstract, which
+One key component in redhawk is the `PromiseOrValue<T>` abstract, which
 has implicit converters from `Promise<T>` and `T`, so that methods that
 return a `PromiseOrValue<T>` can simply return a raw `Promise<T>` or a
 `T`, and the library will coerce everything into a `Promise<T>`.  Raw
@@ -324,7 +324,7 @@ ends with `.end` as it does not return a `Promise`, and no new
 asynchronous work should be started in the `.end` handlers.
 
 Note: `.end` is not the same as the `.done` method of libraries like
-[Q](https://github.com/kriskowal/q).  In Redhawk, unhandled errors are
+[Q](https://github.com/kriskowal/q).  In redhawk, unhandled errors are
 automatically thrown if unhandled after the next tick.
 
 * `onFulfillment`: `TValue -> Void`

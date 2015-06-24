@@ -1,0 +1,11 @@
+{
+  "name": "redhawk",
+  "url": "https://github.com/andywhite37/redhawk",
+  "license": "MIT",
+  "tags": ["promise", "async", "asynchronous", "js"],
+  "description": "A promise library for Haxe, inspired by bluebird.js",
+  "version": "0.0.1-alpha",
+  "classPath": "src/",
+  "releasenote": "Initial release to haxelib",
+  "contributors": ["andywhite37"]
+}

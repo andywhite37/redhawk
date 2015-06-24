@@ -1,0 +1,11 @@
+#! /usr/bin/env bash
+set -euo pipefail
+IFS=$'\n\t'
+
+if [[ -f redhawk.zip ]]; then
+  rm redhawk.zip
+fi
+
+zip -r redhawk.zip src test haxelib.json build.hxml LICENSE README.md
+
+haxelib submit redhawk.zip
