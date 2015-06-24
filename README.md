@@ -200,7 +200,7 @@ The main `Promise` type for this library.
 Constructs a new `Promise` instance.
 
 * `name`: `String`- optional name for the `Promise` (for debugging)
-* `resolver`: `((TValue -> Void) -> (Reason -> Void) -> Void) - resolver function,
+* `resolver`: `((TValue -> Void) -> (Reason -> Void) -> Void)` - resolver function,
 e.g. `function(resolve, reject) { /* resolve(value) or reject(reason) */ }`
 * returns: `Promise<TValue>`
 
@@ -381,7 +381,7 @@ Chains a handler to invoke when the previous `Promise` is settled
 and return a `Promise<Nil>`, but if fulfilled, the previous `Promise` is
 returned.
 
-* `onFulfillmentOrRejection`: `Void -> PromiseOrValue<Nil>`
+* `onFulfillmentOrRejection`: `Void -> Void`
 * returns: `Promise<TValue>` - the previous promise (which is fulfilled
   or rejected)
 

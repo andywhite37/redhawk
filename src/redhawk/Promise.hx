@@ -110,11 +110,13 @@ class Promise<TValue> {
    * The always callback can return a new Promise or value to continue the chain.
    * Returns this Promise when the finally function is settled.
    */
-  public function always<TValueNext>(onFulfillmentOrRejection : Void -> PromiseOrValue<TValueNext>) : Promise<TValueNext> {
+  public function finally(onFulfillmentOrRejection : Void -> Void) : Promise<TValue> {
     return then(function(value) {
-      return onFulfillmentOrRejection();
+      onFulfillmentOrRejection();
+      return this;
     }, function(reason) {
-      return onFulfillmentOrRejection();
+      onFulfillmentOrRejection();
+      return this;
     });
   }
 
@@ -122,7 +124,7 @@ class Promise<TValue> {
    * Chains a handler to be called when this Promise is either fulfilled or rejected.
    * The handler cannot return a new Promise nor value.
    */
-  public function finally(onFulfillmentOrRejection : Void -> Void) : Void {
+  public function finallyEnd(onFulfillmentOrRejection : Void -> Void) : Void {
     end(function(value) {
       onFulfillmentOrRejection();
     }, function(reason) {
@@ -350,7 +352,7 @@ class Promise<TValue> {
           throw 'Promise.settled: null inputs not allowed';
         }
         var promise = inputs[i].toPromise();
-        promise.finally(function() {
+        promise.finallyEnd(function() {
           settledCount++;
           promises[i] = promise;
           if (settledCount == totalCount) {
@@ -524,12 +526,10 @@ class Promise<TValue> {
         inputs[i]
           .toPromise()
           .then(function(value) {
-            trace('input $value');
             inputValue = value;
             return filterer(value);
           })
           .end(function(keep) {
-            trace('keep $keep');
             fulfillmentCount++;
             if (!isSettled) {
               if (keep) {
