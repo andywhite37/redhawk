@@ -392,7 +392,7 @@ prmoise when the handler settles:
 .then(onFulfillmentOrRejection, onFulfillmentOrRejection)
 ```
 
-##### `.finallyEnd(onFulfillmentOrRejection) : Void`
+##### `.finallyEnd(onFulfillmentOrRejection)`
 
 Chains a handler to invoke when the promise is settled (either fulfilled or rejected).
 
