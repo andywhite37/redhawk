@@ -1,10 +1,10 @@
 # Redhawk
 
-A promise library for Haxe.
+An experimental promise library for Haxe.
 
 This library is mostly inspired by the
 [Bluebird](https://github.com/petkaantonov/bluebird) promise library for
-JavaScript.  This library also attempts to conform to the [Promises A+
+JavaScript.  This library also attempts to conform to the [Promises/A+
 spec](https://promisesaplus.com/) where possible.  There are a few cases
 with a typed library where it is difficult to completely conform.
 
@@ -14,47 +14,52 @@ with a typed library where it is difficult to completely conform.
 
 - [Installation](#installation)
 - [Example](#example)
+- [Key concepts](#key-concepts)
 - [API Reference](#api-reference)
-  - [Promise](#promise)
-    - [Construction](#construction)
+  - [`PromiseOrValue<TValue>`](#promiseorvaluetvalue)
+  - [`Reason`](#reason)
+  - [`Promise<TValue>`](#promisetvalue)
+    - [Promise construction](#promise-construction)
       - [`new Promise(?name, resolver)`](#new-promisename-resolver)
       - [`Promise.fulfilled(value)`](#promisefulfilledvalue)
       - [`Promise.rejected(reason)`](#promiserejectedreason)
-    - [Chaining](#chaining)
-      - [`promise.then(?onFulfillment, ?onRejection)`](#promisethenonfulfillment-onrejection)
-      - [`promise.end(?onFulfillment, ?onRejection)`](#promiseendonfulfillment-onrejection)
-      - [`promise.catches(onRejection)`](#promisecatchesonrejection)
-      - [`promise.catchesEnd(onRejection)`](#promisecatchesendonrejection)
-      - [`promise.always(onFulfillmentOrRejection)`](#promisealwaysonfulfillmentorrejection)
-      - [`promise.finally(onFulfillmentOrRejection)`](#promisefinallyonfulfillmentorrejection)
-      - [`promise.thenFulfilled(value)`](#promisethenfulfilledvalue)
-      - [`promise.thenRejected(reason)`](#promisethenrejectedreason)
-      - [`promise.tap(callback)`](#promisetapcallback)
-      - [`promise.delay(ms)`](#promisedelayms)
+    - [Promise chaining](#promise-chaining)
+      - [`.then(?onFulfillment, ?onRejection)`](#thenonfulfillment-onrejection)
+      - [`.end(?onFulfillment, ?onRejection)`](#endonfulfillment-onrejection)
+      - [`.catches(onRejection)`](#catchesonrejection)
+      - [`.catchesEnd(onRejection)`](#catchesendonrejection)
+      - [`.finally(onFulfillmentOrRejection)`](#finallyonfulfillmentorrejection)
+      - [`.finallyEnd(onFulfillmentOrRejection) : Void`](#finallyendonfulfillmentorrejection--void)
+      - [`.thenFulfilled(value)`](#thenfulfilledvalue)
+      - [`.thenRejected(reason)`](#thenrejectedreason)
+      - [`.tap(callback)`](#tapcallback)
+      - [`.delay(ms)`](#delayms)
     - [Static helpers](#static-helpers)
-      - [`Promise.tries(function() { ... })`](#promisetriesfunction---)
+      - [`Promise.tries(callback)`](#promisetriescallback)
       - [`Promise.all(inputs)`](#promiseallinputs)
       - [`Promise.any(inputs)`](#promiseanyinputs)
       - [`Promise.many(inputs, manyCount)`](#promisemanyinputs-manycount)
-      - [`Promise.settled(promisesOrValues)`](#promisesettledpromisesorvalues)
+      - [`Promise.settled(inputs)`](#promisesettledinputs)
       - [`Promise.map(inputs, mapper)`](#promisemapinputs-mapper)
       - [`Promise.each(inputs, callback)`](#promiseeachinputs-callback)
       - [`Promise.reduce(inputs, reducer, initialValue)`](#promisereduceinputs-reducer-initialvalue)
       - [`Promise.filter(inputs, filterer)`](#promisefilterinputs-filterer)
       - [`Promise.delayed(ms)`](#promisedelayedms)
     - [Promise introspection](#promise-introspection)
-      - [`promise.isPending()`](#promiseispending)
-      - [`promise.isFulfilled()`](#promiseisfulfilled)
-      - [`promise.isRejected()`](#promiseisrejected)
-      - [`promise.isSettled()`](#promiseissettled)
-      - [`promise.getValue()`](#promisegetvalue)
-      - [`promise.getReason()`](#promisegetreason)
+      - [`.isPending()`](#ispending)
+      - [`.isFulfilled()`](#isfulfilled)
+      - [`.isRejected()`](#isrejected)
+      - [`.isSettled()`](#issettled)
+      - [`.getValue()`](#getvalue)
+      - [`.getReason()`](#getreason)
 
 <!-- END doctoc generated TOC please keep comment here to allow auto update -->
 
 ## Installation
 
 ```sh
+# Not published to lib.haxe.org (yet)
+# Install using `haxelib dev ...` or `haxelib git ...`
 $ haxelib git redhawk git@github.com:andywhite37/redhawk master src
 ```
 
@@ -132,19 +137,20 @@ class Main {
 
 Build & run for Node.js:
 
+```sh
+$ haxe build.hxml
 ```
-# build.hxml
+
+build.hxml file:
+
+```sh
 -lib redhawk
--D no-deprecation-warnings
 -main Main
 -js main.js
 -cmd node main.js
-
-# build command
-haxe build.hxml
 ```
 
-Outputs:
+`node main.js` output:
 
 ```
 Starting!
@@ -156,50 +162,94 @@ Fourth value
 Oops: Error: something went wrong!
 ```
 
+## Key concepts
+
+The goal of this library was to leverage Haxe typing as much as possible
+while keeping the API as lightweight, easy, and non-verbose as possible.
+One key component in Redhawk is the `PromiseOrValue<T>` abstract, which
+has implicit converters from `Promise<T>` and `T`, so that methods that
+return a `PromiseOrValue<T>` can simply return a raw `Promise<T>` or a
+`T`, and the library will coerce everything into a `Promise<T>`.  Raw
+`T` values are coerced into fulfilled `Promise<T>`s.  A similar abstract
+is used for rejection "reason" objects: `Reason`.  At this time, the
+underlying rejection reason is a `Dynamic` for simplicity at the expense
+of type safety.
+
 ## API Reference
 
-### Promise
+### `PromiseOrValue<TValue>`
 
-#### Construction
+An abstract type backed by an enum of either `Promise<TValue>` or
+`TValue`.  Contains implicit conversions from `Promise<TValue>` and `TValue`
+and an implicit convert to `Promise<TValue>`.
+
+### `Reason`
+
+An abstract type backed by a class that wraps a `Dynamic` value.  The
+purpose of this class is to have a single rejection reason type, which
+allows for any value to be used as a rejection reason.
+
+### `Promise<TValue>`
+
+The main `Promise` type for this library.
+
+#### Promise construction
 
 ##### `new Promise(?name, resolver)`
 
-* Constructs a new promise instance.
-* name - optional name for the promise (for debugging)
-* resolver - `function(resolve, reject) { ... }`
+Constructs a new `Promise` instance.
+
+* `name`: `String`- optional name for the `Promise` (for debugging)
+* `resolver`: `((TValue -> Void) -> (Reason -> Void) -> Void) - resolver function,
+e.g. `function(resolve, reject) { /* resolve(value) or reject(reason) */ }`
+* returns: `Promise<TValue>`
+
+Example:
 
 ```haxe
-// Fulfill the promise synchronously with a value.  Any .then callbacks will
-// be invoked on the next tick.
-var promise = new Promise(function(resolve, reject) {
-  resolve("some value");
-});
+// Create a promise that is eventually fulfilled
 
-// Fulfill the promise with a value asynchronously
 var promise = new Promise(function(resolve, reject) {
+  // Fulfill with a value
+  resolve("some value");
+
+  // Or asynchronously fulfill with a value
   Timer.delay(function() {
     resolve("This is the value!");
   }, 0);
 });
 
-// Reject the promise
+// Create a Promise that is eventually rejected
+
 var promise = new Promise(function(resolve, reject) {
-  // Reject with any reason (will be coerced into a `Reason` object)
+  // Reject with any reason (value will be coerced into a `Reason` wrapper object)
   reject("My reason");
 
-  // or reject with any object instance:
-  // reject(new Error("my error message"));
+  // Or reject with an instance of any type (will be implicitly wrapped in a Reason object)
+  reject(new js.Error("my error message"));
+  reject(new MyError("my custom error"));
+  reject(new MyClass("my custom error"));
 
-  // or throw an Error - will be caught and turned into a rejection
-  // throw new Error("my error message");
+  // Or throw an Error or other object.
+  // The thrown object will be caught and turned into a rejected promise
+  throw new Error("my error message");
+  throw 'some string';
+
+  // Or reject asynchronously
+  Timer.delay(function() {
+    reject('something went wrong');
+  }, 0);
 });
 ```
 
 ##### `Promise.fulfilled(value)`
 
-* Creates a promise that is fulfilled with the given `value`
-* `value` can be any type
-* Shorthand for:
+Creates a new `Promise` that is fulfilled with the given `value`
+
+* `value`: `TValue` - value with which to fulfill the new `Promise`
+* returns: `Promise<TValue>` (fulfilled)
+
+Shorthand for:
 
 ```haxe
 new Promise(function(resolve, reject) {
@@ -209,9 +259,12 @@ new Promise(function(resolve, reject) {
 
 ##### `Promise.rejected(reason)`
 
-* Creates a promise that is rejected with the given `reason`
-* `reason` can be any type, and is implicitly converted to a `Reason` wrapper object.
-* Shorthand for:
+Creates a new `Promise` that is rejected with the given `reason`
+
+* `reason`: `Reason` - can pass any type, and it will implicitly converted to a `Reason` wrapper object
+* returns: `Promise<TValue>` (rejected)
+
+Shorthand for:
 
 ```haxe
 new Promise(function(resolve, reject) {
@@ -219,17 +272,23 @@ new Promise(function(resolve, reject) {
 });
 ```
 
-#### Chaining
+#### Promise chaining
 
-##### `promise.then(?onFulfillment, ?onRejection)`
+##### `.then(?onFulfillment, ?onRejection)`
 
-* `.then` must always return a new Promise or value (which is turned
-  into a promise), or throw.
-* `onFulfillment` is: `function(value) { ... }`
-* `onRejection` is: `function(reason) { ... }`
-* `onFulfillment` and `onRejection` are both optional, but if present, each must
-  return a new promise or value, or throw an error.
-* If you don't want to return a value/promise, use `.end(...)` instead.
+Chains a fulfillment or rejection handler to this `Promise` When the
+previous promise is fulfilled or rejected, the corresponding `.then`
+fulfillment or rejection handler will be invoked on the "next tick."
+
+* `onFulfillment`: `TValue -> PromiseOrValue<TValueNext>` - optional
+  fulfillment handler, which must return a `Promise<TValueNext>` or a
+`TValueNext` or throw.
+* `onRejection`: `Reason -> PromiseOrValue<TValueNext>`: optional
+rejection handler, which must return a `Promise<TValueNext>` or a
+`TValueNext`, or throw.
+* returns: `Promise<TValueNext>`
+
+Example:
 
 ```haxe
 somePromise
@@ -239,17 +298,17 @@ somePromise
     // return a new value (which will be converted to a Promise)
     return "another value";
 
-    // or return a promise
+    // Or return a promise
     return Promise.fulfilled("another value");
     return Promise.rejected("some error message");
 
-    // or throw any object (which will be converted to a rejected promise)
+    // Or throw any object (which will be converted to a rejected promise)
     throw new Error("some error");
   }, function(reason) {
     // Handle the reason - access the rejection/thrown object using `reason.value`
     trace('Something went wrong: ${reason.value}');
 
-    // Return a new promise or value
+    // Return a new promise or value to send to the next chained handler
     return Promise.fulfilled("new value");
 
     // If the onRejection function is not provided, any rejections from
@@ -257,67 +316,157 @@ somePromise
   })
 ```
 
-##### `promise.end(?onFulfillment, ?onRejection)`
+##### `.end(?onFulfillment, ?onRejection)`
 
-* Same as `.then` except that the `onFulfillment` and `onRejection`
-  functions cannot return a new promise/value.
-* The promise chain ends with `.end`.
-* The reason for this method to exist is that Haxe is a typed language,
-  and the type signature of `.then` expects a return value.
-* Note: `.end` is not the same concept as the `.done` method of
-  libraries like [Q](https://github.com/kriskowal/q).  In Redhawk,
-  unhandled errors are automatically thrown if unhandled after the next
-  tick.
+Same as `.then` except that the `onFulfillment` and `onRejection`
+functions do not return a new `Promise` nor `value`.  The promise chain
+ends with `.end` as it does not return a `Promise`, and no new
+asynchronous work should be started in the `.end` handlers.
+
+Note: `.end` is not the same as the `.done` method of libraries like
+[Q](https://github.com/kriskowal/q).  In Redhawk, unhandled errors are
+automatically thrown if unhandled after the next tick.
+
+* `onFulfillment`: `TValue -> Void`
+* `onRejection`: `Reason -> Void`
+* returns: `Void`
+
+Example:
 
 ```haxe
-somePromise
+Promise.fulfilled("test1")
   .then(function(value) {
-    trace('got value: $value');
-    return "new value";
+    // value == "test1"
+    return "test2";
   })
   .end(function(value) {
-    trace('got another value $value');
+    // value == "test2"
+    // can't return promise/value now - chain is done
   }, function(reason) {
-    trace('got a rejection ${reason.value}');
+    trace('should not have gotten here');
+    // can't return promise/value now - chain is done
   });
 ```
 
-##### `promise.catches(onRejection)`
+##### `.catches(onRejection)`
 
-* Shorthand for `.then(null, onRejection)`
+Chains a rejection handler which must return a new `Promise<TValueNext>` or `TValueNext`
 
-##### `promise.catchesEnd(onRejection)`
+* `onRejection`: `Reason -> PromiseOrValue<TValueNext>`
+* returns: `Promise<TValueNext>`
 
-* Shorthand for `.end(null, onRejection)`
+Shorthand for:
 
-##### `promise.always(onFulfillmentOrRejection)`
+```haxe
+.then(null, onRejection)`
+```
 
-* TODO
+##### `.catchesEnd(onRejection)`
 
-##### `promise.finally(onFulfillmentOrRejection)`
+Chains a rejection handler and ends the promise chain.
 
-* TODO
+* `onRejection`: `Reason -> Void`
+* returns: `Void`
 
-##### `promise.thenFulfilled(value)`
+Shorthand for:
 
-* TODO
+```haxe
+.end(null, onRejection)
+```
 
-##### `promise.thenRejected(reason)`
+##### `.finally(onFulfillmentOrRejection)`
 
-* TODO
+Chains a handler to invoke when the previous `Promise` is settled
+(either fulfilled or rejected).  Finally can perform an async operation
+and return a `Promise<Nil>`, but if fulfilled, the previous `Promise` is
+returned.
 
-##### `promise.tap(callback)`
+* `onFulfillmentOrRejection`: `Void -> PromiseOrValue<Nil>`
+* returns: `Promise<TValue>` - the previous promise (which is fulfilled
+  or rejected)
 
-* `callback` is `function(value) { ... }`
-* Injects a callback into a promise chain which receives the value from
-  the previous promise, and returns a Promise that is resolved with the
-same value.
+Conceptually similar to the following, except returns the previous
+prmoise when the handler settles:
 
-##### `promise.delay(ms)`
+```haxe
+.then(onFulfillmentOrRejection, onFulfillmentOrRejection)
+```
 
-* Adds a time delay to a promise chain
-* Returns a promise that is resolved with Nil.nil
-* TODO: should this resolve the previous promise's value?
+##### `.finallyEnd(onFulfillmentOrRejection) : Void`
+
+Chains a handler to invoke when the promise is settled (either fulfilled or rejected).
+
+* `onFulfillmentOrRejection`: `Void -> Void`
+* returns: `Void`
+
+Conceptual shorthand for:
+
+```haxe
+.end(onFulfillmentOrRejection, onFulfillmentOrRejection)
+```
+
+##### `.thenFulfilled(value)`
+
+Chains a handler that returns a new fulfilled Promise after the
+previous promise is fulfilled.
+
+* `value`: `TValueNext`
+* returns: `Promise<TValueNext>`
+
+* Shorthand for:
+
+```haxe
+.then(function(_) {
+  return Promise.fulfilled(value);
+})
+```
+
+##### `.thenRejected(reason)`
+
+Chains a handler that returns a new rejected Promise after the previous
+promise is fulfilled.
+
+* `reason`: `Reason` - previous promise rejection `Reason`
+* returns: `Promise<TValueNext>`
+
+Shorthand for:
+
+```haxe
+.catches(function(_) {
+  return Promise.rejected(reason);
+})
+```
+
+##### `.tap(callback)`
+
+Invokes the `callback` for the fulfillment value of the previous promise
+then returns the previous promise.
+
+* `callback`: `Void -> Void`
+* returns: `Promise<TValue>`
+
+Example:
+
+```haxe
+somePromise
+  .tap(function(value) {
+    // Do something side-effecty with value
+    trace(value);
+  })
+  .then(function(value) {
+    // continue on with somePromise's value
+  })
+  ...
+```
+
+##### `.delay(ms)`
+
+Adds a time delay to a promise chain
+
+* `ms`: `Int` - milliseconds to delay
+* returns: `Promise<Nil>`
+
+Example:
 
 ```haxe
 somePromise
@@ -329,16 +478,24 @@ somePromise
 
 #### Static helpers
 
-##### `Promise.tries(function() { ... })`
+##### `Promise.tries(callback)`
 
-* Executes a function and expects the return of a new Promise instance.
-* A thrown error/etc. is caught and turned into rejected promise.
+Executes a function and expects the return of a new Promise instance.
+
+Intended to wrap blocks of synchronous code, so that throw exceptions
+can be turned into rejected `Promise`s.
+
+* `callback`: `Void -> PromiseOrValue<TValueNext>`
+* returns: `Promise<TValueNext>`
+
+Example:
 
 ```haxe
 Promise.tries(function() {
-  // ...do something
-  // If this throws, it will be caught and turned into a rejected promise
+  // ...do something synchronous that might throw
+  // If this throws, the error will be caught and returned as a rejected `Promise`
 
+  // Return a `Promise`...
   return new Promise(function(resolve, reject) {
     // resolve or reject
   });
@@ -347,19 +504,21 @@ Promise.tries(function() {
 
 ##### `Promise.all(inputs)`
 
-* `inputs` is a (mixed) array of promises or values
-* Returns a promise that is fulfilled when all of the inputs promises or
-  values are fulfilled.  This fulfillment value of the returned promise
-is a (mixed) array the results of the input promises or values.
-* If any input promise is rejected, the returned promise is rejected
-  with that reason.
+Returns a `Promise` that is fulfilled when all the input `Promise`s (or
+values) are fulfilled, or rejected if any input `Promise` is rejected.
+If fulfilled, the fulfillment value is an `Array<Dynamic>` of values
+corresponding to each input `Promise`.  The input array can be a mix of
+`Promises` and values, and can be of mixed types.
+
+* `inputs`: `Array<PromiseOrValue<Dynamic>>`
+* returns: `Promise<Array<Dynamic>>`
+
+Example:
 
 ```haxe
-Promise.all(["test1", Promise.fulfilled("test2"), "test3"])
+Promise.all(["test1", Promise.fulfilled("test2"), "test3", 3, Promise.fulfilled(4)])
   .end(function(results) {
-    for(result in results) {
-      trace(result);
-    }
+    // results : Array<Dynamic> == ["test1", "test2", "test3", 3, 4]
   }, function(reason) {
     trace("Something was rejected");
   });
@@ -367,9 +526,13 @@ Promise.all(["test1", Promise.fulfilled("test2"), "test3"])
 
 ##### `Promise.any(inputs)`
 
-* Returns a Promise that is fulfilled with the value of the first input
-  promise that is fulfilled.
-* Returned promise is rejected if all input promises are rejected.
+Returns a `Promise` that is fulfilled with the value of the first input
+promise that is fulfilled, or rejected if all input `Promise`s are rejected.
+
+* `inputs`: `Array<PromiseOrValue<Dynamic>>`
+* returns: `Promise<Dynamic>`
+
+Example:
 
 ```haxe
 Promise.any([Promise.rejected("test1"), "test2"])
@@ -380,29 +543,37 @@ Promise.any([Promise.rejected("test1"), "test2"])
 
 ##### `Promise.many(inputs, manyCount)`
 
-* Returns a Promise that is fulfilled with an array of `manyCount` values
-for the first `manyCount` input promises or values that are fulfilled.
-* The result value indices do not correspond to the input indices. (TODO is
-  this a good idea?)
-* Returned promise is rejected if fewer than `manyCount` input promises
-  are fulfilled.
+Returns a Promise that is fulfilled with an array of `manyCount` values
+for the first `manyCount` input promises or values that are fulfilled,
+or rejected if fewer than `manyCount` input promises are fulfilled.
+
+TODO: not sure if result array should have indices corresponding to
+input promises, or if it should be collapsed to remove nulls.
+
+* `inputs`: `Array<PromiseOrValue<Dynamic>>`
+* returns: `Promise<Array<Dynamic>>`
+
+Example:
 
 ```haxe
 Promise.many([Promise.rejected("test1"), "test2", Promise.rejected("test3"), "test4", "test5"], 2)
   .end(function(results) {
-    // results.length == 2
-    // results[0] == "test2"
-    // results[1] == "test4"
+    // results[1] == "test2" // TODO: or index 0?
+    // results[3] == "test4" // TODO: or index 1?
   });
 ```
 
-##### `Promise.settled(promisesOrValues)`
+##### `Promise.settled(inputs)`
 
-* `promiseOrValues` is an (mixed) array of promises or values
-* The returned promises is fulfilled with an array of settled promises,
-which could be either fulfilled or rejected.
-* Inspect the state of each promise to determine whether it was
-  fulfilled or rejected.
+Returns a `Promise` that is fulfilled when all of the inputs are settled
+(fulfilled or rejected).  The fulfillment value is an array of settled
+`Promise`s which can be inspected using the `Promise` introspection
+methods.
+
+* `inputs`: `Array<PromiseOrValue<Dynamic>>`
+* returns: `Array<Promise<Dynamic>>`
+
+Example:
 
 ```haxe
 Promise.settled(["test1", Promise.fulfilled(1), Promise.rejected(false)])
@@ -419,19 +590,24 @@ Promise.settled(["test1", Promise.fulfilled(1), Promise.rejected(false)])
 
 ##### `Promise.map(inputs, mapper)`
 
-* `inputs` is an array of `PromiseOrValue<TValueInput>` objects
-* `mapper` is a function that accepts a `TValueInput` value and returns a PromiseOrValue<TValueOutput>
-* The Promise returned by `.map` is fulfilled when all of the mapper
-  functions are fulfilled.  The fulfillment value is an array of the
-values from mapping each input value.
-* If any input promises are rejected, or the mapper function result is rejected
-  for any input, the returned Promise is also rejected.
+Maps an array of `Promise`s or values of the same underlying type to an
+array of values of another type.  Inputs are resolved before mapping,
+and the mapping function can be asynhronous (return a `Promise`).
+
+* `inputs`: `Array<PromiseOrValue<TValueInput>>`
+* `mapper`: `TValueInput -> PromiseOrValue<TValueOutput>`
+* returns: `Promise<Array<TValueOutput>>`
+
+Example:
 
 ```haxe
-var inputs : Array<PromiseOrValue<Int> = [1, 2, 3];
+var inputs : Array<PromiseOrValue<Int> = [1, Promise.fulfilled(2), 3];
+
 var mapper = function(input : Int) : PromiseOrValue<Int> {
-  return Promise.fulfilled(input * 2);
+  return Promise.delayed(50)
+    .thenFulfilled(input * 2);
 };
+
 Promise.map(inputs, mapper)
   .end(function(results) {
     // results == [2, 4, 6]
@@ -440,45 +616,52 @@ Promise.map(inputs, mapper)
 
 ##### `Promise.each(inputs, callback)`
 
-* `inputs` is an array of `PromiseOrValue<TValue>` objects
-* `callback` is a function that accepts a `TValueInput` and does some
-  side effect, then returns a `PromiseOrValue<Nil>`
-* The Promise returned by `.each` is fulfilled with an array of the
-  input values (unchanged).
-* If an input promise is rejected, or the callback is rejected for any
-  input, the returned promise is also rejected.
+Iterates over an array of input `Promise`s or values, and executes a
+side-effect callback for each resolved value.  The callback can be
+asynchronous (return `Promise<Nil>`), but cannot change the input value.
+This method returns a `Promise` of an array of the resolved input values.
+
+* `inputs`: `Array<PromiseOrValue<TValue>>`
+* `callback` TValueInput -> PromiseOrValue<Nil>
+* returns: `Promise<Array<TValueInput>>`
+
+Example:
 
 ```haxe
 var inputs : Array<PromiseOrValue<Int> = [1, 2, 3];
+
 var callback = function(input : Int) : PromiseOrValue<Int> {
   return Promise.delayed(function() {
     trace(input);
   }, 0);
 };
+
 Promise.each(inputs, callback)
   .end(function(results) {
-    // prints 1 2 3
+    // each callback prints "1\n2\n3"
     // results == [1, 2, 3]
   });
 ```
 
 ##### `Promise.reduce(inputs, reducer, initialValue)`
 
-* `inputs` is an `Array<PromiseOrValue<TValueInput>>`
-* `reducer` is a function which takes an accumulator of type `TValueOutput`,
-a value of type `TValueInput` and returns a
-`PromiseOrValue<TValueOutput>`
-* `initialValue` is the initial value for the accumulator
-* Performs an async reduction, where the inputs can be promises or values,
-and the reducer function can return a `PromiseOrValue<TValueOutput>`
-* Returned promise is resolved with the final accumulator value, or
-  rejected if any input or reducer call is rejected.
+Reduces an array of input `Promise`s or values into a single value,
+using a potentially asynchronous reducer function.
+
+* `inputs`: `Array<PromiseOrValue<TValueInput>>`
+* `reducer`: TValueOutput -> TValueInput -> PromiseOrValue<TValueOutput>
+* `initialValue`: `TValueOutput` - the initial value of the reduction
+
+Example:
 
 ```haxe
-var inputs : Array<PromiseOrValue<Int>> = [1, 2, 3];
+var inputs : Array<PromiseOrValue<Int>> = [1, Promise.fulfilled(2), 3];
+
 var reducer = function(acc : String, value : Int) : PromiseOrValue<String> {
-  return acc + Std.string(value);
+  return Promise.delayed(50)
+    .thenFulfilled(acc + Std.string(value));
 };
+
 var initialValue = "";
 
 Promise.reduce(inputs, reducer, initialValue)
@@ -489,12 +672,18 @@ Promise.reduce(inputs, reducer, initialValue)
 
 ##### `Promise.filter(inputs, filterer)`
 
-* `inputs` is an `Array<PromiseOrValue<TValue>>`
-* `filterer` is a function which accepts a `TValue` and returns a
-  `PromiseOrValue<Bool>`
+Filters an array of input `Promise`s or values using a potentially
+asynchronous filter function.
+
+* `inputs`: `Array<PromiseOrValue<TValue>>`
+* `filterer`: `TValue -> PromiseOrValue<Bool>`
+* returns: `Promise<Array<TValue>>` - filtered down using `filterer`
+
+Example:
 
 ```haxe
-var inputs : Array<PromiseOrValue<Int>> = [1, 2, 3, 4, 5];
+var inputs : Array<PromiseOrValue<Int>> = [1, 2, Promise.fulfilled(3), 4, 5];
+
 var filterer = function(value : Int) : PromiseOrValue<Bool> {
   return Promise.delayed(50)
     .thenFulfilled(value < 4);
@@ -508,8 +697,11 @@ Promise.filter(inputs, filterer)
 
 ##### `Promise.delayed(ms)`
 
-* Creates a promise that is fulfilled with nil after a `ms` time delay
-* See also `.delay(ms)` member function
+Creates a promise that is fulfilled with `Nil.nil` after a `ms` time delay.
+
+* `ms`: `Int` - millisecond delay
+
+Example:
 
 ```haxe
 Promise.delayed(500)
@@ -520,28 +712,38 @@ Promise.delayed(500)
 
 #### Promise introspection
 
-##### `promise.isPending()`
+##### `.isPending()`
 
-* Returns whether the promise is pending (not fulfilled nor rejected)
+Indicates if a `Promise` is pending
 
-##### `promise.isFulfilled()`
+* returns: `Bool`
 
-* Returns whether the promise is fulfilled
+##### `.isFulfilled()`
 
-##### `promise.isRejected()`
+Indicates if a `Promise` is fulfilled
 
-* Returns whether the promise is rejected
+* returns: `Bool`
 
-##### `promise.isSettled()`
+##### `.isRejected()`
 
-* Returns whether the promise is fulfilled or rejected
+Indicates if a `Promise` is rejected
 
-##### `promise.getValue()`
+* returns: `Bool`
 
-* Gets the value of a fulfilled Promise
-* Throws an error if the promise is not fulfilled.
+##### `.isSettled()`
 
-##### `promise.getReason()`
+Indicates if a `Promise` is settled (fulfilled or rejected)
 
-* Gets the reason of a rejected Promise
-* Throws an error if the promise is not rejected.
+* returns: `Bool`
+
+##### `.getValue()`
+
+Gets the value of a fulfilled `Promise`
+
+* returns: `TValue`
+
+##### `.getReason()`
+
+Gets the reason of a rejected `Promise`
+
+* returns: `Reason`
