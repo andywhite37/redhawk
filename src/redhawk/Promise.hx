@@ -3,8 +3,8 @@ package redhawk;
 import haxe.Timer;
 
 class Promise<TValue> {
-  public static var scheduler(default, default) : (Void -> Void) -> Int -> Void = Timer.delay;
-  public static var nextTick(default, default) : (Void -> Void) -> Void = Timer.delay.bind(_, 0);
+  public static var async(default, default) : (Void -> Void) -> Int -> Void = Timer.delay;
+  public static var asyncNextTick(default, default) : (Void -> Void) -> Void = Timer.delay.bind(_, 0);
   public static var onPossiblyUnhandledRejection(default, default) : Reason -> Void = function(reason) {
     trace('Promise: possibly unhandled rejection', reason);
     //throw 'Possibly unhandled rejection';
@@ -18,7 +18,6 @@ class Promise<TValue> {
 
   var fulfillmentListeners(default, null) : Array<TValue -> Void>;
   var rejectionListeners(default, null) : Array<Reason -> Void>;
-  var isRejectionHandled(default, null) : Bool;
 
   public function new(?name : String, resolver : ((TValue -> Void) -> (Reason -> Void) -> Void)) {
     this.id = nextId();
@@ -26,7 +25,6 @@ class Promise<TValue> {
     this.state = Pending;
     this.fulfillmentListeners = [];
     this.rejectionListeners = [];
-    this.isRejectionHandled = false;
 
     try {
       resolver(setFulfilled, setRejected);
@@ -46,32 +44,38 @@ class Promise<TValue> {
           addFulfillmentListener(onFulfillment, resolveNext, rejectNext);
           addRejectionListener(onRejection, resolveNext, rejectNext);
         case Fulfilled(value):
-          addFulfillmentListener(onFulfillment, resolveNext, rejectNext, true);
+          addFulfillmentListener(onFulfillment, resolveNext, rejectNext);
+          notifyOnNextTick();
         case Rejected(reason):
-          addRejectionListener(onRejection, resolveNext, rejectNext, true);
+          addRejectionListener(onRejection, resolveNext, rejectNext);
+          notifyOnNextTick();
       };
     });
   }
 
-  public function thenv(?onFulfillment : TValue -> Void, ?onRejection : Reason -> Void) : Promise<TValue> {
-    var newOnFulfillment : TValue -> PromiseOrValue<TValue> = null;
-    var newOnRejection : Reason -> PromiseOrValue<TValue> = null;
+  public function thenv(?onFulfillment : TValue -> Void, ?onRejection : Reason -> Void) : Promise<Nil> {
+    var wrappedOnFulfillment : TValue -> PromiseOrValue<Nil> = null;
+    var wrappedOnRejection : Reason -> PromiseOrValue<Nil> = null;
 
     if (onFulfillment != null) {
-      newOnFulfillment = function(value) {
-        onFulfillment(value);
-        return Promise.fulfilled(value);
+      wrappedOnFulfillment = function(value) {
+        return new Promise(function(resolve, reject) {
+          onFulfillment(value);
+          resolve(Nil.nil);
+        });
       };
     }
 
     if (onRejection != null) {
-      newOnRejection = function(reason) {
-        onRejection(reason);
-        return Promise.rejected(reason);
+      wrappedOnRejection = function(reason) {
+        return new Promise(function(resolve, reject) {
+          onRejection(reason);
+          reject(reason);
+        });
       };
     }
 
-    return then(newOnFulfillment, newOnRejection);
+    return then(wrappedOnFulfillment, wrappedOnRejection);
   }
 
   public function catches<TValueNext>(
@@ -79,7 +83,7 @@ class Promise<TValue> {
     return then(null, onRejection);
   }
 
-  public function catchesv(onRejection : Reason -> Void) : Promise<TValue> {
+  public function catchesv(onRejection : Reason -> Void) : Promise<Nil> {
     return thenv(null, onRejection);
   }
 
@@ -473,7 +477,7 @@ class Promise<TValue> {
 
   public static function delayed(ms : Int) : Promise<Nil> {
     return new Promise(function(resolve, reject) {
-      scheduler(function() {
+      async(function() {
         resolve(Nil.nil);
       }, ms);
     });
@@ -554,8 +558,7 @@ class Promise<TValue> {
   function addFulfillmentListener<TValueNext>(
       ?onFulfillment : TValue -> PromiseOrValue<TValueNext>,
       resolveNext : TValueNext -> Void,
-      rejectNext : Reason -> Void,
-      ?notify : Bool = false) : Void {
+      rejectNext : Reason -> Void) : Void {
 
     if (onFulfillment == null) {
       // If there is no fulfillment handler, we can't pass the current TValue along, because its expecting
@@ -567,28 +570,19 @@ class Promise<TValue> {
       try {
         onFulfillment(value)
           .toPromise()
-          .thenv(function(valueNext) {
-            resolveNext(valueNext);
-          }, function(reasonNext) {
-            rejectNext(reasonNext);
-          });
+          .thenv(resolveNext, rejectNext);
       } catch (reason : Reason) {
         rejectNext(reason);
       } catch (e : Dynamic) {
         rejectNext(e);
       }
     });
-
-    if (notify) {
-      this.notifyOnNextTick();
-    }
   }
 
   function addRejectionListener<TValueNext>(
       ?onRejection : Reason -> PromiseOrValue<TValueNext>,
       resolveNext : TValueNext -> Void,
-      rejectNext : Reason -> Void,
-      ?notify : Bool = false) : Void {
+      rejectNext : Reason -> Void) : Void {
     // If there is no rejection handler, create a handler that just passes the rejection reason
     // along.  This allows the error to cascade through a promise chain until it is handled.
     if (onRejection == null) {
@@ -597,31 +591,21 @@ class Promise<TValue> {
       };
     }
 
-    //isRejectionHandled = true;
-
     rejectionListeners.push(function(value) {
       try {
         onRejection(value)
           .toPromise()
-          .thenv(function(valueNext) {
-            resolveNext(valueNext);
-          }, function(reasonNext) {
-            rejectNext(reasonNext);
-          });
+          .thenv(resolveNext, rejectNext);
       } catch (reason : Reason) {
         rejectNext(reason);
       } catch (e : Dynamic) {
         rejectNext(e);
       }
     });
-
-    if (notify) {
-      this.notifyOnNextTick();
-    }
   }
 
   function notifyOnNextTick() : Void {
-    nextTick(function() {
+    asyncNextTick(function() {
       switch state {
         case Fulfilled(value):
           for (fulfillmentListener in fulfillmentListeners) {
@@ -634,14 +618,6 @@ class Promise<TValue> {
             rejectionListener(reason);
           }
           rejectionListeners = [];
-
-          /*
-          nextTick(function() {
-            if (!isRejectionHandled) {
-              onPossiblyUnhandledRejection(reason);
-            }
-          });
-          */
 
         case _: // No-op
       }
