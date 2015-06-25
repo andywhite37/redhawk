@@ -3,58 +3,40 @@ package redhawk;
 import haxe.Timer;
 
 class Promise<TValue> {
-  /**
-   * Private counter of unique ids for promise instances
-   */
+  public static var scheduler(default, default) : (Void -> Void) -> Int -> Void = Timer.delay;
+  public static var nextTick(default, default) : (Void -> Void) -> Void = Timer.delay.bind(_, 0);
+  public static var onPossiblyUnhandledRejection(default, default) : Reason -> Void = function(reason) {
+    trace('Promise: possibly unhandled rejection', reason);
+    //throw 'Possibly unhandled rejection';
+  };
+
   static var idCounter(default, null) : Int = 0;
 
-  /**
-   * Unique identifier for this Promise
-   */
   public var id(default, null) : Int;
-
-  /**
-   * User-specified name for this Promise (does not need to be unique)
-   */
   public var name(default, null) : String;
-
-  /**
-   * Current State of this promise.
-   */
   public var state(default, null) : State<TValue>;
 
-  /**
-   * List of listeners to be notified when this promise is fulfilled
-   */
   var fulfillmentListeners(default, null) : Array<TValue -> Void>;
-
-  /**
-   * List of listeners to be notified when this promise is rejected
-   */
   var rejectionListeners(default, null) : Array<Reason -> Void>;
+  var isRejectionHandled(default, null) : Bool;
 
-  /**
-   * Constructor for a Promise.
-   */
   public function new(?name : String, resolver : ((TValue -> Void) -> (Reason -> Void) -> Void)) {
     this.id = nextId();
     this.name = (name != null && name.length > 0) ? 'Promise: $name' : 'Promise: $id';
     this.state = Pending;
     this.fulfillmentListeners = [];
     this.rejectionListeners = [];
+    this.isRejectionHandled = false;
 
     try {
       resolver(setFulfilled, setRejected);
+    } catch (reason : Reason) {
+      setRejected(reason);
     } catch (e : Dynamic) {
       setRejected(e);
     }
   }
 
-  /**
-   * Chains fulfillment/rejection handlers onto this promise.  The fulfillment/rejection
-   * handlers should return either a value or a new promise.  If you don't want to return
-   * a value or promise, use the `end` function instead.
-   */
   public function then<TValueNext>(
       ?onFulfillment : TValue -> PromiseOrValue<TValueNext>,
       ?onRejection : Reason -> PromiseOrValue<TValueNext>) : Promise<TValueNext> {
@@ -71,45 +53,36 @@ class Promise<TValue> {
     });
   }
 
-  /**
-   * Chains fulfillment/rejection handlers onto this promise.  The fulfillment/rejection
-   * handlers in `end` cannot return a new value nor promise.
-   */
-  public function end(?onFulfillment : TValue -> Void, ?onRejection : Reason -> Void) : Void {
-    switch state {
-      case Pending:
-        addFulfillmentListenerEnd(onFulfillment);
-        addRejectionListenerEnd(onRejection);
-      case Fulfilled(value):
-        addFulfillmentListenerEnd(onFulfillment, true);
-      case Rejected(reason):
-        addRejectionListenerEnd(onRejection, true);
-    };
+  public function thenv(?onFulfillment : TValue -> Void, ?onRejection : Reason -> Void) : Promise<TValue> {
+    var newOnFulfillment : TValue -> PromiseOrValue<TValue> = null;
+    var newOnRejection : Reason -> PromiseOrValue<TValue> = null;
+
+    if (onFulfillment != null) {
+      newOnFulfillment = function(value) {
+        onFulfillment(value);
+        return Promise.fulfilled(value);
+      };
+    }
+
+    if (onRejection != null) {
+      newOnRejection = function(reason) {
+        onRejection(reason);
+        return Promise.rejected(reason);
+      };
+    }
+
+    return then(newOnFulfillment, newOnRejection);
   }
 
-  /**
-   * Chains a rejection handler onto this promise.  Shortcut for `.then(null, onRejection)`.
-   * The rejection handler should return a new value or promise.  If you don't want to return
-   * a value or promise, use `catchesEnd` instead.
-   */
   public function catches<TValueNext>(
       onRejection : Reason -> PromiseOrValue<TValueNext>) : Promise<TValueNext> {
     return then(null, onRejection);
   }
 
-  /**
-   * Chains a rejection handler onto this promise.  Shortcut for `.end(null, onRejection)`.
-   * The rejection handler cannot return a value nor promise, so the promise chain will end here.
-   */
-  public function catchesEnd(onRejection : Reason -> Void) : Void {
-    end(null, onRejection);
+  public function catchesv(onRejection : Reason -> Void) : Promise<TValue> {
+    return thenv(null, onRejection);
   }
 
-  /**
-   * Chains a handler to be called when this promise is either fulfilled or rejected.
-   * The always callback can return a new Promise or value to continue the chain.
-   * Returns this Promise when the finally function is settled.
-   */
   public function finally(onFulfillmentOrRejection : Void -> Void) : Promise<TValue> {
     return then(function(value) {
       onFulfillmentOrRejection();
@@ -120,40 +93,18 @@ class Promise<TValue> {
     });
   }
 
-  /**
-   * Chains a handler to be called when this Promise is either fulfilled or rejected.
-   * The handler cannot return a new Promise nor value.
-   */
-  public function finallyEnd(onFulfillmentOrRejection : Void -> Void) : Void {
-    end(function(value) {
-      onFulfillmentOrRejection();
-    }, function(reason) {
-      onFulfillmentOrRejection();
-    });
-  }
-
-  /**
-   * Returns a new fulfilled Promise for the given value after this Promise is resolved.
-   */
   public function thenFulfilled<TValueNext>(value : TValueNext) : Promise<TValueNext> {
     return then(function(_) {
-      return value;
+      return Promise.fulfilled(value);
     });
   }
 
-  /**
-   * Returns a new rejected Promise for the given reason after this Promise is resolved.
-   */
   public function thenRejected<TValueNext>(reason : Reason) : Promise<TValueNext> {
     return then(function(_) {
       return Promise.rejected(reason);
     });
   }
 
-  /**
-   * Adds an interceptor callback into a promise chain, so the current value can be inspected.
-   * Returns the previous promise unchanged.
-   */
   public function tap(callback : TValue -> Void) : Promise<TValue> {
     return then(function(value) {
       callback(value);
@@ -161,54 +112,38 @@ class Promise<TValue> {
     });
   }
 
-  /**
-   * Returns a promise that is delayed by `ms`.
-   */
   public function delay(ms : Int) : Promise<Nil> {
     return then(function(value) {
       return Promise.delayed(ms);
     });
   }
 
-  /**
-   * Helper method which returns a promise that is fulfilled with the given value.
-   */
   public static function fulfilled<TValue>(value : TValue) : Promise<TValue> {
     return new Promise(function(resolve, reject) {
       resolve(value);
     });
   }
 
-  /**
-   * Helper method which returns a promise that is rejected with the given reason.
-   */
   public static function rejected<TValue>(reason : Reason) : Promise<TValue> {
     return new Promise(function(resolve, reject) {
       reject(reason);
     });
   }
 
-  /**
-   * Returns a new promise which executes the callback in a try/catch, so that thrown errors
-   * can be turned into rejections.
-   */
   public static function tries<TValue>(callback : Void -> PromiseOrValue<TValue>) : Promise<TValue> {
     return new Promise(function(resolve, reject) {
       try {
         callback()
           .toPromise()
-          .end(resolve, reject);
+          .thenv(resolve, reject);
+      } catch (reason : Reason) {
+        reject(reason);
       } catch (e : Dynamic) {
         reject(e);
       }
     });
   }
 
-  /**
-   * Returns a Promise that is fulfilled with an array of results corresponding to the fulfillment value
-   * of each input.
-   * If any input Promise is rejected, the returned Promise is rejected with the input's rejection Reason.
-   */
   public static function all(inputs : Array<PromiseOrValue<Dynamic>>) : Promise<Array<Dynamic>> {
     var totalCount = inputs.length;
     var isSettled = false;
@@ -220,16 +155,15 @@ class Promise<TValue> {
     return new Promise(function(resolve, reject) {
       for (i in 0...totalCount) {
         if (inputs[i] == null) {
-          throw 'Promise.all: null inputs not allowed';
+          throw new Reason('Promise.all: null inputs not allowed');
         }
         inputs[i]
           .toPromise()
-          .end(function(value) {
+          .thenv(function(value) {
             fulfillmentCount++;
             if (!isSettled) {
               fulfillments[i] = value;
               if (fulfillmentCount == totalCount) {
-                // Got all fulfillments, resolve main promise
                 isSettled = true;
                 resolve(fulfillments);
               }
@@ -237,7 +171,6 @@ class Promise<TValue> {
           }, function(reason) {
             rejectionCount++;
             if (!isSettled) {
-              // Got a rejection, reject main promise
               rejections[i] = reason;
               isSettled = true;
               reject(rejections);
@@ -247,10 +180,6 @@ class Promise<TValue> {
     });
   }
 
-  /**
-   * Returns a Promise that is fulfilled with the fulfillment value of the first input promise to be fulfilled.
-   * If all input promises are rejected, the returned Promise will be rejected.
-   */
   public static function any(inputs : Array<PromiseOrValue<Dynamic>>) : Promise<Dynamic> {
     return new Promise(function(resolve, reject) {
       var totalCount = inputs.length;
@@ -262,14 +191,13 @@ class Promise<TValue> {
 
       for (i in 0...totalCount) {
         if (inputs[i] == null) {
-          throw 'Promise.any: null inputs not allowed';
+          throw new Reason('Promise.any: null inputs not allowed');
         }
         inputs[i]
           .toPromise()
-          .end(function(value) {
+          .thenv(function(value) {
             fulfillmentCount++;
             if (!isSettled) {
-              // Got a fulfillment, resolve the main promise now
               fulfillment = value;
               isSettled = true;
               resolve(fulfillment);
@@ -279,7 +207,6 @@ class Promise<TValue> {
             if (!isSettled) {
               rejections[i] = reason;
               if (rejectionCount == totalCount) {
-                // Did not get any fulfillments, reject
                 isSettled = true;
                 reject(rejections);
               }
@@ -289,15 +216,10 @@ class Promise<TValue> {
     });
   }
 
-  /**
-   * Returns a Promise that is fulfilled with an array of fulfillment values for the first `manyCount`
-   * input promises to be fulfilled.
-   * If fewer than `manyCount` input promises are fulfilled, the returned promise will be rejected.
-   */
   public static function many(inputs : Array<PromiseOrValue<Dynamic>>, manyCount : Int) {
     return new Promise(function(resolve, reject) {
       if (manyCount <= 0) {
-        throw 'Promise.many: manyCount must be greater than 0';
+        throw new Reason('Promise.many: manyCount must be greater than 0');
       }
       var totalCount = inputs.length;
       var isSettled = false;
@@ -308,11 +230,11 @@ class Promise<TValue> {
 
       for (i in 0...totalCount) {
         if (inputs[i] == null) {
-          throw 'Promise.many: null values not allowed';
+          throw new Reason('Promise.many: null values not allowed');
         }
         inputs[i]
           .toPromise()
-          .end(function(value) {
+          .thenv(function(value) {
             fulfillmentCount++;
             if (!isSettled) {
               fulfillments[i] = value;
@@ -349,10 +271,10 @@ class Promise<TValue> {
 
       for (i in 0...totalCount) {
         if (inputs[i] == null) {
-          throw 'Promise.settled: null inputs not allowed';
+          throw new Reason('Promise.settled: null inputs not allowed');
         }
         var promise = inputs[i].toPromise();
-        promise.finallyEnd(function() {
+        promise.finally(function() {
           settledCount++;
           promises[i] = promise;
           if (settledCount == totalCount) {
@@ -376,17 +298,15 @@ class Promise<TValue> {
 
       for (i in 0...totalCount) {
         if (inputs[i] == null) {
-          throw 'Promise.map: null inputs not allowed';
+          throw new Reason('Promise.map: null inputs not allowed');
         }
 
-        // Resolve the input value
         inputs[i]
           .toPromise()
           .then(function(inputValue) {
-            // Map the input value into the output value and resolve
             return mapper(inputValue);
           })
-          .end(function(outputValue) {
+          .thenv(function(outputValue) {
             fulfillmentCount++;
             if (!isSettled) {
               fulfillments[i] = outputValue;
@@ -420,7 +340,7 @@ class Promise<TValue> {
 
       for (i in 0...totalCount) {
         if (inputs[i] == null) {
-          throw 'Promise.each: null inputs not allowed';
+          throw new Reason('Promise.each: null inputs not allowed');
         }
         var inputValue : TValue = null;
         inputs[i]
@@ -429,7 +349,7 @@ class Promise<TValue> {
             inputValue = value;
             return callback(inputValue);
           })
-          .end(function(_) {
+          .thenv(function(_) {
             fulfillmentCount++;
             if (!isSettled) { 
               fulfillments[i] = inputValue;
@@ -518,18 +438,17 @@ class Promise<TValue> {
 
       for (i in 0...totalCount) {
         if (inputs[i] == null) {
-          throw 'Promise.filter: null inputs not allowed';
+          throw new Reason('Promise.filter: null inputs not allowed');
         }
 
         var inputValue : TValue = null;
-
         inputs[i]
           .toPromise()
           .then(function(value) {
             inputValue = value;
             return filterer(value);
           })
-          .end(function(keep) {
+          .thenv(function(keep) {
             fulfillmentCount++;
             if (!isSettled) {
               if (keep) {
@@ -554,9 +473,15 @@ class Promise<TValue> {
 
   public static function delayed(ms : Int) : Promise<Nil> {
     return new Promise(function(resolve, reject) {
-      Timer.delay(function() {
+      scheduler(function() {
         resolve(Nil.nil);
       }, ms);
+    });
+  }
+
+  public static function nil() : Promise<Nil> {
+    return new Promise(function(resolve, reject) {
+      resolve(Nil.nil);
     });
   }
 
@@ -591,14 +516,14 @@ class Promise<TValue> {
   public function getValue() : TValue {
     return switch state {
       case Fulfilled(value): value;
-      case _: throw "Cannot get value for unfulfilled promise";
+      case _: throw new Reason("Cannot get value for unfulfilled promise");
     };
   }
 
   public function getReason() : Reason {
     return switch state {
       case Rejected(reason) : reason;
-      case _: throw "Cannot get reason for non-rejected promise";
+      case _: throw new Reason("Cannot get reason for non-rejected promise");
     };
   }
 
@@ -610,9 +535,9 @@ class Promise<TValue> {
     switch state {
       case Pending:
         state = Fulfilled(value);
-        notify();
+        notifyOnNextTick();
       case other:
-        throw new js.Error('Promise cannot change from $other to Fulfilled');
+        throw new Reason('Promise cannot change from $other to Fulfilled');
     }
   }
 
@@ -620,9 +545,9 @@ class Promise<TValue> {
     switch state {
       case Pending:
         state = Rejected(reason);
-        notify();
+        notifyOnNextTick();
       case other:
-        throw new js.Error('Promise cannot change from $other to Rejected');
+        throw new Reason('Promise cannot change from $other to Rejected');
     }
   }
 
@@ -631,6 +556,7 @@ class Promise<TValue> {
       resolveNext : TValueNext -> Void,
       rejectNext : Reason -> Void,
       ?notify : Bool = false) : Void {
+
     if (onFulfillment == null) {
       // If there is no fulfillment handler, we can't pass the current TValue along, because its expecting
       // a TValueNext.
@@ -641,18 +567,20 @@ class Promise<TValue> {
       try {
         onFulfillment(value)
           .toPromise()
-          .end(function(valueNext) {
+          .thenv(function(valueNext) {
             resolveNext(valueNext);
           }, function(reasonNext) {
             rejectNext(reasonNext);
           });
+      } catch (reason : Reason) {
+        rejectNext(reason);
       } catch (e : Dynamic) {
         rejectNext(e);
       }
     });
 
     if (notify) {
-      this.notify();
+      this.notifyOnNextTick();
     }
   }
 
@@ -669,73 +597,55 @@ class Promise<TValue> {
       };
     }
 
+    //isRejectionHandled = true;
+
     rejectionListeners.push(function(value) {
       try {
         onRejection(value)
           .toPromise()
-          .end(function(valueNext) {
+          .thenv(function(valueNext) {
             resolveNext(valueNext);
           }, function(reasonNext) {
             rejectNext(reasonNext);
           });
+      } catch (reason : Reason) {
+        rejectNext(reason);
       } catch (e : Dynamic) {
         rejectNext(e);
       }
     });
 
     if (notify) {
-      this.notify();
+      this.notifyOnNextTick();
     }
   }
 
-  function addFulfillmentListenerEnd(?onFulfillment : TValue -> Void, ?notify : Bool = false) : Void {
-    if (onFulfillment == null) {
-      return;
-    }
-
-    fulfillmentListeners.push(function(value) {
-      onFulfillment(value);
-    });
-
-    if (notify) {
-      this.notify();
-    }
-  }
-
-  function addRejectionListenerEnd(?onRejection : Reason -> Void, ?notify : Bool = false) : Void {
-    if (onRejection == null) {
-      return;
-    }
-
-    rejectionListeners.push(function(reason) {
-      onRejection(reason);
-    });
-
-    if (notify) {
-      this.notify();
-    }
-  }
-
-  function notify() : Void {
-    switch state {
-      case Fulfilled(value):
-        haxe.Timer.delay(function() {
+  function notifyOnNextTick() : Void {
+    nextTick(function() {
+      switch state {
+        case Fulfilled(value):
           for (fulfillmentListener in fulfillmentListeners) {
             fulfillmentListener(value);
           }
           fulfillmentListeners = [];
-        }, 0);
 
-      case Rejected(reason):
-        haxe.Timer.delay(function() {
+        case Rejected(reason):
           for (rejectionListener in rejectionListeners) {
             rejectionListener(reason);
           }
           rejectionListeners = [];
-        }, 0);
 
-      case _: // No-op
-    }
+          /*
+          nextTick(function() {
+            if (!isRejectionHandled) {
+              onPossiblyUnhandledRejection(reason);
+            }
+          });
+          */
+
+        case _: // No-op
+      }
+    });
   }
 
   static function nextId() : Int {
