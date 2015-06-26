@@ -3,14 +3,11 @@ package redhawk;
 import haxe.Timer;
 
 class Promise<TValue> {
-  public static var async(default, default) : (Void -> Void) -> Int -> Void = Timer.delay;
-  public static var asyncNextTick(default, default) : (Void -> Void) -> Void = Timer.delay.bind(_, 0);
-  public static var onPossiblyUnhandledRejection(default, default) : Reason -> Void = function(reason) {
-    trace('Promise: possibly unhandled rejection', reason);
-    //throw 'Possibly unhandled rejection';
-  };
-
-  static var idCounter(default, null) : Int = 0;
+  public static var UNHANDLED_REJECTION_EVENT(default, null) : String;
+  public static var events(default, null) : Events;
+  public static var defer(default, default) : (Void -> Void) -> Int -> Void;
+  public static var nextTick(default, default) : (Void -> Void) -> Void;
+  static var idCounter(default, null) : Int;
 
   public var id(default, null) : Int;
   public var name(default, null) : String;
@@ -18,13 +15,26 @@ class Promise<TValue> {
 
   var fulfillmentListeners(default, null) : Array<TValue -> Void>;
   var rejectionListeners(default, null) : Array<Reason -> Void>;
+  var hasListeners(default, null) : Bool;
 
-  public function new(?name : String, resolver : ((TValue -> Void) -> (Reason -> Void) -> Void)) {
+  public static function __init__() {
+    UNHANDLED_REJECTION_EVENT = "unhandled:rejection";
+    events = new Events();
+    events.on(UNHANDLED_REJECTION_EVENT, function(reason : Reason) {
+      trace("unhandled rejection");
+    });
+    defer = Timer.delay;
+    nextTick = Timer.delay.bind(_, 0);
+    idCounter = 0;
+  }
+
+  public function new(resolver : ((TValue -> Void) -> (Reason -> Void) -> Void), ?name : String) {
     this.id = nextId();
     this.name = (name != null && name.length > 0) ? 'Promise: $name' : 'Promise: $id';
     this.state = Pending;
     this.fulfillmentListeners = [];
     this.rejectionListeners = [];
+    this.hasListeners = false;
 
     try {
       resolver(setFulfilled, setRejected);
@@ -38,6 +48,7 @@ class Promise<TValue> {
   public function then<TValueNext>(
       ?onFulfillment : TValue -> PromiseOrValue<TValueNext>,
       ?onRejection : Reason -> PromiseOrValue<TValueNext>) : Promise<TValueNext> {
+    hasListeners = true;
     return new Promise(function(resolveNext : TValueNext -> Void, rejectNext : Reason -> Void) {
       switch state {
         case Pending:
@@ -70,7 +81,7 @@ class Promise<TValue> {
       wrappedOnRejection = function(reason) {
         return new Promise(function(resolve, reject) {
           onRejection(reason);
-          reject(reason);
+          resolve(Nil.nil); // Resolve this to nil unless onRejection throws - this way the rejection is "handled"
         });
       };
     }
@@ -355,7 +366,7 @@ class Promise<TValue> {
           })
           .thenv(function(_) {
             fulfillmentCount++;
-            if (!isSettled) { 
+            if (!isSettled) {
               fulfillments[i] = inputValue;
               if (fulfillmentCount == totalCount) {
                 isSettled = true;
@@ -477,7 +488,7 @@ class Promise<TValue> {
 
   public static function delayed(ms : Int) : Promise<Nil> {
     return new Promise(function(resolve, reject) {
-      async(function() {
+      defer(function() {
         resolve(Nil.nil);
       }, ms);
     });
@@ -487,6 +498,22 @@ class Promise<TValue> {
     return new Promise(function(resolve, reject) {
       resolve(Nil.nil);
     });
+  }
+
+  public static function on(name : String, callback : Dynamic -> Void) {
+    events.on(name, callback);
+  }
+
+  public static function once(name : String, callback : Dynamic -> Void) {
+    events.once(name, callback);
+  }
+
+  public static function off(name : String, ?callback : Dynamic -> Void) {
+    events.off(name, callback);
+  }
+
+  public static function emit(name : String, ?data : Dynamic) {
+    events.emit(name, data);
   }
 
   public function isPending() : Bool {
@@ -550,8 +577,19 @@ class Promise<TValue> {
       case Pending:
         state = Rejected(reason);
         notifyOnNextTick();
+        checkUnhandledRejectionOnNextTick(reason);
       case other:
         throw new Reason('Promise cannot change from $other to Rejected');
+    }
+  }
+
+  function checkUnhandledRejectionOnNextTick(reason : Reason) : Void {
+    if (!hasListeners) {
+      nextTick(function() {
+        if (!hasListeners) {
+          emit(UNHANDLED_REJECTION_EVENT, reason);
+        }
+      });
     }
   }
 
@@ -605,7 +643,7 @@ class Promise<TValue> {
   }
 
   function notifyOnNextTick() : Void {
-    asyncNextTick(function() {
+    nextTick(function() {
       switch state {
         case Fulfilled(value):
           for (fulfillmentListener in fulfillmentListeners) {
@@ -626,5 +664,9 @@ class Promise<TValue> {
 
   static function nextId() : Int {
     return idCounter++;
+  }
+
+  inline function debug() {
+    untyped __js__("debugger;");
   }
 }

@@ -10,12 +10,19 @@ import haxe.CallStack;
 class CReason {
   public var value(default, null) : Dynamic;
   public var pos(default, null) : PosInfos;
-  public var stack(default, null) : String;
+  public var stack(default, null) : Array<StackItem>;
 
-  public function new(value : Dynamic, ?stack : String, ?pos : PosInfos) {
+  public function new(value : Dynamic, ?stack : Array<StackItem>, ?pos : PosInfos) {
     this.value = value;
     this.pos = pos;
-    this.stack = stack != null ? stack : getStack();
+    if (stack != null) {
+      this.stack = stack;
+    } else {
+      this.stack = try { CallStack.exceptionStack(); } catch (e : Dynamic) { []; };
+      if (this.stack.length == 0) {
+        this.stack = try { CallStack.callStack(); } catch (e: Dynamic) { []; };
+      }
+    }
   }
 
   public function is(type : Dynamic) : Bool {
@@ -28,20 +35,8 @@ class CReason {
 
   @:to
   public function toString() : String {
-    return 'Rejection reason from: ${pos.className}.${pos.methodName}() at ${pos.lineNumber}${stack}\n';
-  }
-
-  function getStack() {
-    var stack = try {
-      CallStack.exceptionStack();
-    } catch (e : Dynamic) {
-      try {
-        CallStack.callStack();
-      } catch (e : Dynamic) {
-        [];
-      }
-    }
-    return CallStack.toString(stack);
+    var stackString = CallStack.toString(stack);
+    return 'Rejection reason from: ${pos.className}.${pos.methodName}() at ${pos.lineNumber}${stackString}\n';
   }
 }
 
@@ -52,12 +47,12 @@ class CReason {
  */
 @:forward(value, pos, stackItems, toString)
 abstract Reason(CReason) {
-  public function new(?value : Dynamic) {
+  public inline function new(?value : Dynamic) {
     this = new CReason(value);
   }
 
   @:from
-  public static function fromDynamic(value : Dynamic) {
+  public static inline function fromDynamic(value : Dynamic) {
     return new Reason(value);
   }
 }

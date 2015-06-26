@@ -18,17 +18,17 @@ class TestPromise {
   ////////////////////////////////////////////////////////////////////////////////
 
   public function testConstructor() {
-    var promise = new Promise("Test", function(resolve, reject) {
+    var promise = new Promise(function(resolve, reject) {
       // no-op
-    });
+    }, "Test");
     Assert.same("Promise: Test", promise.name);
-    Assert.isTrue(promise.id > 0);
+    Assert.isTrue(promise.id >= 0);
     Assert.same("Promise: Test", promise.toString());
     Assert.same(Pending, promise.state);
   }
 
-  public function testConstructorWithResolverException() {
-    var done = Assert.createAsync(1000);
+  public function xtestConstructorWithResolverException() {
+    var done = Assert.createAsync();
 
     var reason = new Reason("This is a test");
     var promise : Promise<String> = null;
@@ -117,6 +117,16 @@ class TestPromise {
   }
 
   public function testStateRejectedSync() {
+    var done = Assert.createAsync();
+
+    debug();
+
+    Promise.once("unhandled:rejection", function(reason : Reason) {
+      debug();
+      Assert.pass();
+      done();
+    });
+
     var promise = new Promise(function(resolve, reject) {
       reject("test");
     });
@@ -125,6 +135,8 @@ class TestPromise {
       case Rejected(reason): Assert.same("test", reason.value);
       case _: Assert.fail();
     };
+
+    debug();
   }
 
   public function testStateRejectedAsync() {
@@ -431,7 +443,7 @@ class TestPromise {
   // Promise.tries static function
   ////////////////////////////////////////////////////////////////////////////////
 
-  public function testTries() {
+  public function xtestTries() {
     var done = Assert.createAsync();
 
     Promise
@@ -462,7 +474,7 @@ class TestPromise {
       });
   }
 
-  public function testTriesWithException() {
+  public function xtestTriesWithException() {
     var done = Assert.createAsync();
 
     Promise
@@ -854,15 +866,12 @@ class TestPromise {
   // Promise.reduce static function
   ////////////////////////////////////////////////////////////////////////////////
 
-  var reducerDelay = 50;
-
   public function reducer(acc : Int, value : Int) : PromiseOrValue<Int> {
-    return Promise.delayed(reducerDelay)
+    return Promise.delayed(0)
       .thenFulfilled(acc + value);
   }
 
   public function testReduceInputsFulfilledReducerFulfilled() {
-    trace('here');
     var inputs : Array<PromiseOrValue<Int>> = [1, 2, 3, 4, 5];
     var done = Assert.createAsync(1000);
     Promise.reduce(inputs, reducer, 0)
@@ -873,12 +882,11 @@ class TestPromise {
         Assert.fail();
         done();
       });
-    trace('here2');
   }
 
   public function testReduceInputsRejected() {
     var inputs : Array<PromiseOrValue<Int>> = [1, 2, Promise.rejected(3), 4, 5];
-    var done = Assert.createAsync(reducerDelay * inputs.length * 2);
+    var done = Assert.createAsync(1000);
     Promise.reduce(inputs, reducer, 0)
       .thenv(function(value) {
         Assert.fail();
@@ -892,7 +900,7 @@ class TestPromise {
 
   public function testReduceInputsFulfilledReducerRejected() {
     var inputs : Array<PromiseOrValue<Int>> = [1, 2, 3, 4, 5];
-    var done = Assert.createAsync(reducerDelay * inputs.length * 2);
+    var done = Assert.createAsync(1000);
     var reducerRejection = function(acc : Int, input : Int) : PromiseOrValue<Int> {
       if (input == 3) {
         return Promise.rejected('sorry');
@@ -913,7 +921,7 @@ class TestPromise {
 
   public function testReduceMixedTypes() {
     var inputs : Array<PromiseOrValue<String>> = ["1", "2", "3", "4", "5"];
-    var done = Assert.createAsync(null, 1000);
+    var done = Assert.createAsync(1000);
     var reducer = function(acc : { sum: Int, product : Int }, input : String) : PromiseOrValue<{ sum: Int, product: Int }> {
       return Promise.tries(function() {
         var num = Std.parseInt(input);
@@ -939,7 +947,7 @@ class TestPromise {
   ////////////////////////////////////////////////////////////////////////////////
 
   public function testFilterInputsFulfilledFiltererFulfilled() {
-    var done = Assert.createAsync(null, 1000);
+    var done = Assert.createAsync(1000);
     var inputs : Array<PromiseOrValue<Int>> = [1, 2, 3, 4, 5];
     var filterer = function(input : Int) : PromiseOrValue<Bool> {
       return input < 4;
@@ -959,7 +967,7 @@ class TestPromise {
   }
 
   public function testFilterInputsRejected() {
-    var done = Assert.createAsync(null, 1000);
+    var done = Assert.createAsync(1000);
     var inputs : Array<PromiseOrValue<Int>> = [Promise.rejected(1), Promise.rejected(2)];
     var filterer = function(input : Int) : PromiseOrValue<Bool> {
       return input < 4;
@@ -982,7 +990,7 @@ class TestPromise {
 
   public function testDelayed() {
     var ms = 50;
-    var done = Assert.createAsync(ms * 2);
+    var done = Assert.createAsync(1000);
     var startTime = Date.now().getTime();
     Promise.delayed(ms)
       .thenv(function(_) {
@@ -1002,7 +1010,7 @@ class TestPromise {
 
   public function testDelay() {
     var ms = 50;
-    var done = Assert.createAsync(ms * 2);
+    var done = Assert.createAsync(1000);
     var startTime = Date.now().getTime();
 
     Promise.fulfilled("test")
@@ -1058,7 +1066,7 @@ class TestPromise {
   ////////////////////////////////////////////////////////////////////////////////
 
   public function testMultipleHandlers() {
-    var done = Assert.createAsync(null, 1000);
+    var done = Assert.createAsync(1000);
 
     var count = 0;
     function check(value : String) {
@@ -1076,14 +1084,15 @@ class TestPromise {
     promise.thenv(check);
   }
 
-  /*
   public function testNoErrorHandler() {
-    var done = Assert.createAsync(null, 1000);
+    var done = Assert.createAsync(1000);
 
-    untyped __js__("debugger;");
+    Promise.once(Promise.UNHANDLED_REJECTION_EVENT, function(reason) {
+      Assert.pass();
+      done();
+    });
+
+    debug();
     Promise.rejected("my error");
-
-    //done();
   }
-  */
 }
