@@ -9,8 +9,8 @@ class TestAll {
     //runner.addCase(new TestEvents());
     //runner.addCase(new TestReason());
     //runner.addCase(new TestPromiseOrValue());
-    runner.addCase(new TestPromise(), ~/testTriesWithEx/);
-    //runner.addCase(new TestPromise());
+    //runner.addCase(new TestPromise(), ~/testTriesWithEx/);
+    runner.addCase(new TestPromise());
     Report.create(runner);
     runner.run();
   }

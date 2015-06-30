@@ -19,28 +19,18 @@ class Promise<TValue> {
   public static function __init__() {
     UNHANDLED_REJECTION_EVENT = "unhandled:rejection";
     events = new Events();
-    events.on(UNHANDLED_REJECTION_EVENT, function(reason : Reason) {
-      trace("Unhandled rejection", reason);
-    });
+    events.on(UNHANDLED_REJECTION_EVENT, onUnhandledRejection);
     defer = Timer.delay;
     nextTick = Timer.delay.bind(_, 0);
-
-    /*
-    defer = untyped function(callback, ms) {
-      setTimeout(callback, ms);
-    };
-
-    nextTick = untyped function(callback) {
-      setTimeout(callback, 0);
-    };
-    */
-
     idCounter = 0;
+  }
+
+  public static function onUnhandledRejection(reason : Reason) {
+    trace("Unhandled rejection", reason);
   }
 
   public function new(resolver : ((TValue -> Void) -> (Reason -> Void) -> Void)) {
     this.id = nextId();
-    trace('$this');
     this.state = Pending;
     this.fulfillmentListeners = [];
     this.rejectionListeners = [];
@@ -589,8 +579,8 @@ class Promise<TValue> {
     switch state {
       case Pending:
         state = Rejected(reason);
-        notifyOnNextTick();
         checkUnhandledRejectionOnNextTick(reason);
+        notifyOnNextTick();
       case other:
         throw new Reason('Promise cannot change from $other to Rejected');
     }
@@ -634,6 +624,7 @@ class Promise<TValue> {
       ?onRejection : Reason -> PromiseOrValue<TValueNext>,
       resolveNext : TValueNext -> Void,
       rejectNext : Reason -> Void) : Void {
+
     // If there is no rejection handler, create a handler that just passes the rejection reason
     // along.  This allows the error to cascade through a promise chain until it is handled.
     if (onRejection == null) {
