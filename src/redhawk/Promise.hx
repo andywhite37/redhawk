@@ -10,7 +10,6 @@ class Promise<TValue> {
   static var idCounter(default, null) : Int;
 
   public var id(default, null) : Int;
-  public var name(default, null) : String;
   public var state(default, null) : State<TValue>;
 
   var fulfillmentListeners(default, null) : Array<TValue -> Void>;
@@ -21,16 +20,27 @@ class Promise<TValue> {
     UNHANDLED_REJECTION_EVENT = "unhandled:rejection";
     events = new Events();
     events.on(UNHANDLED_REJECTION_EVENT, function(reason : Reason) {
-      trace("unhandled rejection");
+      trace("Unhandled rejection", reason);
     });
     defer = Timer.delay;
     nextTick = Timer.delay.bind(_, 0);
+
+    /*
+    defer = untyped function(callback, ms) {
+      setTimeout(callback, ms);
+    };
+
+    nextTick = untyped function(callback) {
+      setTimeout(callback, 0);
+    };
+    */
+
     idCounter = 0;
   }
 
-  public function new(resolver : ((TValue -> Void) -> (Reason -> Void) -> Void), ?name : String) {
+  public function new(resolver : ((TValue -> Void) -> (Reason -> Void) -> Void)) {
     this.id = nextId();
-    this.name = (name != null && name.length > 0) ? 'Promise: $name' : 'Promise: $id';
+    trace('$this');
     this.state = Pending;
     this.fulfillmentListeners = [];
     this.rejectionListeners = [];
@@ -64,7 +74,9 @@ class Promise<TValue> {
     });
   }
 
-  public function thenv(?onFulfillment : TValue -> Void, ?onRejection : Reason -> Void) : Promise<Nil> {
+  public function thenv(
+      ?onFulfillment : TValue -> Void,
+      ?onRejection : Reason -> Void) : Promise<Nil> {
     var wrappedOnFulfillment : TValue -> PromiseOrValue<Nil> = null;
     var wrappedOnRejection : Reason -> PromiseOrValue<Nil> = null;
 
@@ -94,7 +106,8 @@ class Promise<TValue> {
     return then(null, onRejection);
   }
 
-  public function catchesv(onRejection : Reason -> Void) : Promise<Nil> {
+  public function catchesv(
+      onRejection : Reason -> Void) : Promise<Nil> {
     return thenv(null, onRejection);
   }
 
@@ -559,7 +572,7 @@ class Promise<TValue> {
   }
 
   public function toString() : String {
-    return name;
+    return 'Promise $id';
   }
 
   function setFulfilled(value : TValue) : Void {

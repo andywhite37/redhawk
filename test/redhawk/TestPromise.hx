@@ -13,6 +13,10 @@ class TestPromise {
     untyped __js__("debugger;");
   }
 
+  public function setup() {
+    //Promise.off(Promise.UNHANDLED_REJECTION_EVENT);
+  }
+
   ////////////////////////////////////////////////////////////////////////////////
   // Constructor
   ////////////////////////////////////////////////////////////////////////////////
@@ -20,14 +24,13 @@ class TestPromise {
   public function testConstructor() {
     var promise = new Promise(function(resolve, reject) {
       // no-op
-    }, "Test");
-    Assert.same("Promise: Test", promise.name);
+    });
     Assert.isTrue(promise.id >= 0);
     Assert.same("Promise: Test", promise.toString());
     Assert.same(Pending, promise.state);
   }
 
-  public function xtestConstructorWithResolverException() {
+  public function testConstructorWithResolverException() {
     var done = Assert.createAsync();
 
     var reason = new Reason("This is a test");
@@ -119,10 +122,7 @@ class TestPromise {
   public function testStateRejectedSync() {
     var done = Assert.createAsync();
 
-    debug();
-
-    Promise.once("unhandled:rejection", function(reason : Reason) {
-      debug();
+    Promise.once(Promise.UNHANDLED_REJECTION_EVENT, function(reason : Reason) {
       Assert.pass();
       done();
     });
@@ -135,8 +135,6 @@ class TestPromise {
       case Rejected(reason): Assert.same("test", reason.value);
       case _: Assert.fail();
     };
-
-    debug();
   }
 
   public function testStateRejectedAsync() {
@@ -443,7 +441,7 @@ class TestPromise {
   // Promise.tries static function
   ////////////////////////////////////////////////////////////////////////////////
 
-  public function xtestTries() {
+  public function testTries() {
     var done = Assert.createAsync();
 
     Promise
@@ -457,24 +455,36 @@ class TestPromise {
         throw new Reason("Failed test");
       })
       .then(function(value) {
-        debug();
         throw new Reason("test error 1");
       }, function(reason) {
         Assert.fail();
         throw new Reason("Failed test");
       })
       .thenv(function(value) {
-        debug();
         Assert.fail();
         throw new Reason("Failed test");
       }, function(reason) {
-        debug();
         Assert.same("test error 1", reason.value);
         done();
       });
   }
 
-  public function xtestTriesWithException() {
+  public function testTriesWithRejection() {
+    var done = Assert.createAsync();
+
+    Promise
+      .tries(function() {
+        return Promise.rejected("my rejection");
+      })
+      .catchesv(function(reason) {
+        Assert.same("my rejection", reason.value);
+        done();
+      });
+  }
+
+  public function testTriesWithException() {
+    debug();
+    trace('testTriesWithException');
     var done = Assert.createAsync();
 
     Promise
@@ -1088,11 +1098,10 @@ class TestPromise {
     var done = Assert.createAsync(1000);
 
     Promise.once(Promise.UNHANDLED_REJECTION_EVENT, function(reason) {
-      Assert.pass();
+      //Assert.pass();
       done();
     });
 
-    debug();
     Promise.rejected("my error");
   }
 }
