@@ -4,8 +4,8 @@
   "license": "MIT",
   "tags": ["promise", "async", "asynchronous", "js"],
   "description": "A promise library for Haxe, inspired by bluebird.js",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "classPath": "src/",
-  "releasenote": "Cleanup some documentation, rename thenv/catchesv to end/catchesEnd (to match docs)",
+  "releasenote": "Remove broken code that was attempting to detect unhandled rejections",
   "contributors": ["andywhite37"]
 }
