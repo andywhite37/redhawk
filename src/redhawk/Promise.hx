@@ -3,8 +3,6 @@ package redhawk;
 import haxe.Timer;
 
 class Promise<TValue> {
-  public static var UNHANDLED_REJECTION_EVENT(default, null) : String;
-  public static var events(default, null) : Events;
   public static var defer(default, default) : (Void -> Void) -> Int -> Void;
   public static var nextTick(default, default) : (Void -> Void) -> Void;
   static var idCounter(default, null) : Int;
@@ -17,16 +15,9 @@ class Promise<TValue> {
   var hasListeners(default, null) : Bool;
 
   public static function __init__() {
-    UNHANDLED_REJECTION_EVENT = "unhandled:rejection";
-    events = new Events();
-    events.on(UNHANDLED_REJECTION_EVENT, onUnhandledRejection);
     defer = Timer.delay;
     nextTick = Timer.delay.bind(_, 0);
     idCounter = 0;
-  }
-
-  public static function onUnhandledRejection(reason : Reason) {
-    trace("Unhandled rejection", reason);
   }
 
   public function new(resolver : ((TValue -> Void) -> (Reason -> Void) -> Void)) {
@@ -128,9 +119,9 @@ class Promise<TValue> {
     });
   }
 
-  public function delay(ms : Int) : Promise<Nil> {
+  public function delay(ms : Int) : Promise<TValue> {
     return then(function(value) {
-      return Promise.delayed(ms);
+      return Promise.delayed(ms, value);
     });
   }
 
@@ -139,12 +130,15 @@ class Promise<TValue> {
       resolve(value);
     });
   }
+  public static var value(default, never) = fulfilled; // alias
+  public static var resolved(default, never) = fulfilled; // alias
 
   public static function rejected<TValue>(reason : Reason) : Promise<TValue> {
     return new Promise(function(resolve, reject) {
       reject(reason);
     });
   }
+  public static var error(default, never) = rejected; // alias
 
   public static function tries<TValue>(callback : Void -> PromiseOrValue<TValue>) : Promise<TValue> {
     return new Promise(function(resolve, reject) {
@@ -487,10 +481,10 @@ class Promise<TValue> {
     });
   }
 
-  public static function delayed(ms : Int) : Promise<Nil> {
+  public static function delayed<TValue>(ms : Int, ?value : TValue) : Promise<TValue> {
     return new Promise(function(resolve, reject) {
       defer(function() {
-        resolve(Nil.nil);
+        resolve(value);
       }, ms);
     });
   }
@@ -499,22 +493,6 @@ class Promise<TValue> {
     return new Promise(function(resolve, reject) {
       resolve(Nil.nil);
     });
-  }
-
-  public static function on(name : String, callback : Dynamic -> Void) {
-    events.on(name, callback);
-  }
-
-  public static function once(name : String, callback : Dynamic -> Void) {
-    events.once(name, callback);
-  }
-
-  public static function off(name : String, ?callback : Dynamic -> Void) {
-    events.off(name, callback);
-  }
-
-  static function emit(name : String, ?data : Dynamic) {
-    events.emit(name, data);
   }
 
   public function isPending() : Bool {
@@ -577,20 +555,9 @@ class Promise<TValue> {
     switch state {
       case Pending:
         state = Rejected(reason);
-        checkUnhandledRejectionOnNextTick(reason);
         notifyOnNextTick();
       case other:
         throw new Reason('Promise cannot change from $other to Rejected');
-    }
-  }
-
-  function checkUnhandledRejectionOnNextTick(reason : Reason) : Void {
-    if (!hasListeners) {
-      nextTick(function() {
-        if (!hasListeners) {
-          emit(UNHANDLED_REJECTION_EVENT, reason);
-        }
-      });
     }
   }
 

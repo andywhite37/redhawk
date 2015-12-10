@@ -14,11 +14,9 @@ class TestPromise {
   }
 
   public function setup() {
-    Promise.off(Promise.UNHANDLED_REJECTION_EVENT);
   }
 
   public function tearDown() {
-    Promise.on(Promise.UNHANDLED_REJECTION_EVENT, Promise.onUnhandledRejection);
   }
 
   ////////////////////////////////////////////////////////////////////////////////
@@ -35,11 +33,6 @@ class TestPromise {
 
   public function testConstructorWithResolverException() {
     var done = Assert.createAsync();
-
-    Promise.on(Promise.UNHANDLED_REJECTION_EVENT, function(reason) {
-      Assert.fail();
-      done();
-    });
 
     var reason = new Reason("This is a test");
     var promise : Promise<String> = null;
@@ -128,17 +121,9 @@ class TestPromise {
   }
 
   public function testStateRejectedSync() {
-    var done = Assert.createAsync();
-
-    Promise.once(Promise.UNHANDLED_REJECTION_EVENT, function(reason : Reason) {
-      Assert.pass();
-      done();
-    });
-
     var promise = new Promise(function(resolve, reject) {
       reject("test");
     });
-
     switch promise.state {
       case Rejected(reason): Assert.same("test", reason.value);
       case _: Assert.fail();
@@ -147,18 +132,15 @@ class TestPromise {
 
   public function testStateRejectedAsync() {
     var done = Assert.createAsync();
-
     var promise = new Promise(function(resolve, reject) {
       Timer.delay(function() {
         reject("test");
       }, 0);
     });
-
     switch promise.state {
       case Pending: Assert.pass();
       case _: Assert.fail();
     };
-
     promise.end(function(value) {
       Assert.fail();
       done();
@@ -178,7 +160,6 @@ class TestPromise {
   public function testFulfilled() {
     var done = Assert.createAsync();
     var i = 0;
-
     Promise.fulfilled("test")
       .end(function(value) {
         Assert.same(2, ++i);
@@ -188,13 +169,11 @@ class TestPromise {
         Assert.fail();
         done();
       });
-
     Assert.same(1, ++i);
   }
 
   public function testRejected() {
     var done = Assert.createAsync();
-
     var error = { message: "test" };
     Promise.rejected(error)
       .end(function(value) {
@@ -271,7 +250,6 @@ class TestPromise {
         Assert.fail();
         return Promise.rejected("Test failed");
       })
-
       .then(function(value) {
         Assert.fail();
         return Promise.rejected("Test failed");
@@ -279,7 +257,6 @@ class TestPromise {
         Assert.same("error1", reason.value);
         return Promise.fulfilled("test2");
       })
-
       .end(function(value) {
         Assert.same("test2", value);
         done();
@@ -313,7 +290,6 @@ class TestPromise {
 
   public function testEnd() {
     var done = Assert.createAsync();
-
     new Promise(function(resolve, reject) {
       resolve("test");
     })
@@ -326,7 +302,6 @@ class TestPromise {
   public function testEndAsync() {
     var done = Assert.createAsync();
     var i = 0;
-
     Promise.fulfilled("test")
       .end(function(value) {
         i++;
@@ -336,7 +311,6 @@ class TestPromise {
         Assert.fail();
         done();
       });
-
     i++;
     Assert.same(1, i);
   }
@@ -353,8 +327,8 @@ class TestPromise {
         Assert.same("test", reason.value);
         return "test2";
       })
-      .end(function(_) {
-        Assert.pass();
+      .end(function(value) {
+        Assert.equals("test2", value);
         done();
       });
   }
@@ -378,18 +352,17 @@ class TestPromise {
     var i = 0;
     Promise.fulfilled("test")
       .finally(function() {
-        i++;
-        Assert.same(1, i);
+        Assert.equals(2, ++i);
       })
       .end(function(value) {
-        i++;
-        Assert.same(2, i);
-        Assert.same("test", value);
+        Assert.equals(3, ++i);
+        Assert.equals("test", value);
         done();
       }, function(reason) {
         Assert.fail();
         done();
       });
+    Assert.equals(1, ++i);
   }
 
   public function testFinallyRejected() {
@@ -397,18 +370,17 @@ class TestPromise {
     var i = 0;
     Promise.rejected("test")
       .finally(function() {
-        i++;
-        Assert.same(1, i);
+        Assert.same(2, ++i);
       })
       .end(function(value) {
         Assert.fail();
         done();
       }, function(reason) {
-        i++;
-        Assert.same(2, i);
+        Assert.same(3, ++i);
         Assert.same("test", reason.value);
         done();
       });
+    Assert.equals(1, ++i);
   }
 
   ////////////////////////////////////////////////////////////////////////////////
@@ -451,7 +423,6 @@ class TestPromise {
 
   public function testTries() {
     var done = Assert.createAsync();
-
     Promise
       .tries(function() {
         return "test1";
@@ -479,7 +450,6 @@ class TestPromise {
 
   public function testTriesWithRejection() {
     var done = Assert.createAsync();
-
     Promise
       .tries(function() {
         return Promise.rejected("my rejection");
@@ -490,13 +460,26 @@ class TestPromise {
       });
   }
 
-  public function testTriesWithException() {
-    debug();
+  public function testTriesWithThrownReason() {
     var done = Assert.createAsync();
-
     Promise
       .tries(function() {
         throw new Reason("problem");
+      })
+      .end(function(value) {
+        Assert.fail();
+        done();
+      }, function(reason) {
+        Assert.same("problem", reason.value);
+        done();
+      });
+  }
+
+  public function testTriesWithThrownException() {
+    var done = Assert.createAsync();
+    Promise
+      .tries(function() {
+        throw 'problem';
       })
       .end(function(value) {
         Assert.fail();
@@ -513,7 +496,6 @@ class TestPromise {
 
   public function testAllInputsFulfilled() {
     var done = Assert.createAsync();
-
     Promise.all(["test1", Promise.fulfilled(1), Promise.fulfilled(true), "test2"])
       .end(function(results) {
         Assert.same("test1", results[0]);
@@ -529,7 +511,6 @@ class TestPromise {
 
   public function testAllInputsRejected() {
     var done = Assert.createAsync();
-
     Promise.all([Promise.rejected("test1"), Promise.rejected("test2")])
       .end(function(results) {
         Assert.fail();
@@ -544,7 +525,6 @@ class TestPromise {
 
   public function testAllInputsMixed() {
     var done = Assert.createAsync();
-
     Promise.all(["test1", Promise.rejected("test2"), Promise.fulfilled("test3")])
       .end(function(results) {
         Assert.fail();
@@ -564,7 +544,6 @@ class TestPromise {
 
   public function testAnyInputsFulfilled() {
     var done = Assert.createAsync();
-
     Promise.any(["test1", Promise.fulfilled("test2")])
       .end(function(result) {
         Assert.isTrue(result == "test1" || result == "test2");
@@ -577,7 +556,6 @@ class TestPromise {
 
   public function testAnyInputsRejected() {
     var done = Assert.createAsync();
-
     Promise.any([Promise.rejected("test1"), Promise.rejected("test2")])
       .end(function(result) {
         Assert.fail();
@@ -592,7 +570,6 @@ class TestPromise {
 
   public function testAnyInputsMixed() {
     var done = Assert.createAsync();
-
     Promise.any([Promise.rejected("test1"), "test2", Promise.rejected("test3")])
       .end(function(result) {
         Assert.same("test2", result);
@@ -609,7 +586,6 @@ class TestPromise {
 
   public function testManyInputsFulfilled() {
     var done = Assert.createAsync();
-
     Promise.many(["test1", "test2", "test3"], 2)
       .end(function(results) {
         Assert.same(2, results.length);
@@ -624,7 +600,6 @@ class TestPromise {
 
   public function testManyEnoughInputsFulfilled() {
     var done = Assert.createAsync();
-
     Promise.many(["test1", Promise.rejected("test2"), "test3"], 2)
       .end(function(results) {
         Assert.same(3, results.length);
@@ -640,7 +615,6 @@ class TestPromise {
 
   public function testManyInputsNotEnoughFulfilled() {
     var done = Assert.createAsync();
-
     Promise.many([Promise.rejected("test1"), "test2", Promise.rejected("test3")], 2)
       .end(function(results) {
         Assert.fail();
@@ -656,7 +630,6 @@ class TestPromise {
 
   function testManyInputsRejected() {
     var done = Assert.createAsync();
-
     Promise.many([Promise.rejected("test1"), Promise.rejected("test2"), Promise.rejected("test3")], 2)
       .end(function(results) {
         Assert.fail();
@@ -1029,7 +1002,6 @@ class TestPromise {
     var ms = 50;
     var done = Assert.createAsync(1000);
     var startTime = Date.now().getTime();
-
     Promise.fulfilled("test")
       .delay(ms)
       .end(function(_) {
@@ -1049,7 +1021,6 @@ class TestPromise {
 
   public function testTap() {
     var done = Assert.createAsync();
-
     Promise.fulfilled("test")
       .tap(function(value) {
         Assert.same("test", value);
@@ -1084,7 +1055,6 @@ class TestPromise {
 
   public function testMultipleHandlers() {
     var done = Assert.createAsync(1000);
-
     var count = 0;
     function check(value : String) {
       count++;
@@ -1093,22 +1063,9 @@ class TestPromise {
         done();
       }
     }
-
     var promise = Promise.fulfilled("test");
-
     promise.end(check);
     promise.end(check);
     promise.end(check);
-  }
-
-  public function testNoErrorHandler() {
-    var done = Assert.createAsync(1000);
-
-    Promise.once(Promise.UNHANDLED_REJECTION_EVENT, function(reason) {
-      Assert.pass();
-      done();
-    });
-
-    Promise.rejected("my error");
   }
 }
