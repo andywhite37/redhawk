@@ -40,7 +40,7 @@ class TestPromiseOrValue {
     var pov : PromiseOrValue<String> = "test";
     var promise = pov.toPromise();
     Assert.isTrue(Std.is(promise, Promise));
-    promise.thenv(function(value) {
+    promise.end(function(value) {
       Assert.same("test", value);
       done();
     });
@@ -52,7 +52,7 @@ class TestPromiseOrValue {
     var pov : PromiseOrValue<String> = promiseOrig;
     var promise = pov.toPromise();
     Assert.equals(promiseOrig, promise);
-    promise.thenv(function(value) {
+    promise.end(function(value) {
       Assert.same("test", value);
       done();
     });

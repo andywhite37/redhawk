@@ -4,8 +4,8 @@
   "license": "MIT",
   "tags": ["promise", "async", "asynchronous", "js"],
   "description": "A promise library for Haxe, inspired by bluebird.js",
-  "version": "0.0.1-alpha",
+  "version": "0.1.0",
   "classPath": "src/",
-  "releasenote": "Initial release to haxelib",
+  "releasenote": "Cleanup some documentation, rename thenv/catchesv to end/catchesEnd (to match docs)",
   "contributors": ["andywhite37"]
 }

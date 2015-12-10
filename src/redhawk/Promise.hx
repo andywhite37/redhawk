@@ -64,7 +64,7 @@ class Promise<TValue> {
     });
   }
 
-  public function thenv(
+  public function end(
       ?onFulfillment : TValue -> Void,
       ?onRejection : Reason -> Void) : Promise<Nil> {
     var wrappedOnFulfillment : TValue -> PromiseOrValue<Nil> = null;
@@ -91,14 +91,12 @@ class Promise<TValue> {
     return then(wrappedOnFulfillment, wrappedOnRejection);
   }
 
-  public function catches<TValueNext>(
-      onRejection : Reason -> PromiseOrValue<TValueNext>) : Promise<TValueNext> {
+  public function catches<TValueNext>(onRejection : Reason -> PromiseOrValue<TValueNext>) : Promise<TValueNext> {
     return then(null, onRejection);
   }
 
-  public function catchesv(
-      onRejection : Reason -> Void) : Promise<Nil> {
-    return thenv(null, onRejection);
+  public function catchesEnd(onRejection : Reason -> Void) : Promise<Nil> {
+    return end(null, onRejection);
   }
 
   public function finally(onFulfillmentOrRejection : Void -> Void) : Promise<TValue> {
@@ -153,7 +151,7 @@ class Promise<TValue> {
       try {
         callback()
           .toPromise()
-          .thenv(resolve, reject);
+          .end(resolve, reject);
       } catch (reason : Reason) {
         reject(reason);
       } catch (e : Dynamic) {
@@ -177,7 +175,7 @@ class Promise<TValue> {
         }
         inputs[i]
           .toPromise()
-          .thenv(function(value) {
+          .end(function(value) {
             fulfillmentCount++;
             if (!isSettled) {
               fulfillments[i] = value;
@@ -213,7 +211,7 @@ class Promise<TValue> {
         }
         inputs[i]
           .toPromise()
-          .thenv(function(value) {
+          .end(function(value) {
             fulfillmentCount++;
             if (!isSettled) {
               fulfillment = value;
@@ -234,7 +232,7 @@ class Promise<TValue> {
     });
   }
 
-  public static function many(inputs : Array<PromiseOrValue<Dynamic>>, manyCount : Int) {
+  public static function many(inputs : Array<PromiseOrValue<Dynamic>>, manyCount : Int) : Promise<Array<Dynamic>> {
     return new Promise(function(resolve, reject) {
       if (manyCount <= 0) {
         throw new Reason('Promise.many: manyCount must be greater than 0');
@@ -252,7 +250,7 @@ class Promise<TValue> {
         }
         inputs[i]
           .toPromise()
-          .thenv(function(value) {
+          .end(function(value) {
             fulfillmentCount++;
             if (!isSettled) {
               fulfillments[i] = value;
@@ -324,7 +322,7 @@ class Promise<TValue> {
           .then(function(inputValue) {
             return mapper(inputValue);
           })
-          .thenv(function(outputValue) {
+          .end(function(outputValue) {
             fulfillmentCount++;
             if (!isSettled) {
               fulfillments[i] = outputValue;
@@ -367,7 +365,7 @@ class Promise<TValue> {
             inputValue = value;
             return callback(inputValue);
           })
-          .thenv(function(_) {
+          .end(function(_) {
             fulfillmentCount++;
             if (!isSettled) {
               fulfillments[i] = inputValue;
@@ -466,7 +464,7 @@ class Promise<TValue> {
             inputValue = value;
             return filterer(value);
           })
-          .thenv(function(keep) {
+          .end(function(keep) {
             fulfillmentCount++;
             if (!isSettled) {
               if (keep) {
@@ -515,7 +513,7 @@ class Promise<TValue> {
     events.off(name, callback);
   }
 
-  public static function emit(name : String, ?data : Dynamic) {
+  static function emit(name : String, ?data : Dynamic) {
     events.emit(name, data);
   }
 
@@ -611,7 +609,7 @@ class Promise<TValue> {
       try {
         onFulfillment(value)
           .toPromise()
-          .thenv(resolveNext, rejectNext);
+          .end(resolveNext, rejectNext);
       } catch (reason : Reason) {
         rejectNext(reason);
       } catch (e : Dynamic) {
@@ -637,7 +635,7 @@ class Promise<TValue> {
       try {
         onRejection(value)
           .toPromise()
-          .thenv(resolveNext, rejectNext);
+          .end(resolveNext, rejectNext);
       } catch (reason : Reason) {
         rejectNext(reason);
       } catch (e : Dynamic) {

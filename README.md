@@ -29,7 +29,6 @@ with a typed library where it is difficult to completely conform.
       - [`.catches(onRejection)`](#catchesonrejection)
       - [`.catchesEnd(onRejection)`](#catchesendonrejection)
       - [`.finally(onFulfillmentOrRejection)`](#finallyonfulfillmentorrejection)
-      - [`.finallyEnd(onFulfillmentOrRejection) : Void`](#finallyendonfulfillmentorrejection--void)
       - [`.thenFulfilled(value)`](#thenfulfilledvalue)
       - [`.thenRejected(reason)`](#thenrejectedreason)
       - [`.tap(callback)`](#tapcallback)
@@ -390,19 +389,6 @@ prmoise when the handler settles:
 
 ```haxe
 .then(onFulfillmentOrRejection, onFulfillmentOrRejection)
-```
-
-##### `.finallyEnd(onFulfillmentOrRejection)`
-
-Chains a handler to invoke when the promise is settled (either fulfilled or rejected).
-
-* `onFulfillmentOrRejection`: `Void -> Void`
-* returns: `Void`
-
-Conceptual shorthand for:
-
-```haxe
-.end(onFulfillmentOrRejection, onFulfillmentOrRejection)
 ```
 
 ##### `.thenFulfilled(value)`
