@@ -53,6 +53,9 @@ abstract Reason(CReason) {
 
   @:from
   public static inline function fromDynamic(value : Dynamic) {
+    if (Std.is(value, CReason)) {
+      return cast value;
+    }
     return new Reason(value);
   }
 }
